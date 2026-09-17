@@ -10,7 +10,8 @@ class ApiService {
 
   static Future<String?> _getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('access_token') ?? prefs.getString('staff_access_token');
+    return prefs.getString('access_token') ??
+        prefs.getString('staff_access_token');
   }
 
   static Future<Map<String, String>> _authHeaders() async {
@@ -22,7 +23,8 @@ class ApiService {
     };
   }
 
-  static Future<void> _saveSession(Map<String, dynamic> data, {bool isStaff = false}) async {
+  static Future<void> _saveSession(Map<String, dynamic> data,
+      {bool isStaff = false}) async {
     final prefs = await SharedPreferences.getInstance();
 
     final accessToken = data['access_token'];
@@ -57,14 +59,17 @@ class ApiService {
       if (user['email'] != null) {
         await prefs.setString('saved_email', user['email'].toString());
       }
-      if (user['profile_photo'] != null && user['profile_photo'].toString().isNotEmpty) {
-        await prefs.setString('saved_profile_photo_path', user['profile_photo'].toString());
+      if (user['profile_photo'] != null &&
+          user['profile_photo'].toString().isNotEmpty) {
+        await prefs.setString(
+            'saved_profile_photo_path', user['profile_photo'].toString());
       }
     }
 
     final business = data['business'];
     if (business is Map) {
-      if (business['id'] != null) await prefs.setInt('business_id', business['id']);
+      if (business['id'] != null)
+        await prefs.setInt('business_id', business['id']);
       if (business['name'] != null) {
         await prefs.setString('saved_store_name', business['name'].toString());
       }
@@ -86,29 +91,40 @@ class ApiService {
     await prefs.remove('saved_profile_photo_path');
   }
 
-  // Cek apakah user yang sedang login adalah Owner
-  static Future<bool> isOwner() async {
+  // Implementasi RBAC sederhana: role user yang sedang login diambil dari
+  // sesi lokal ('user_role') dengan fallback ke /auth/me.
+  static Future<String> currentRole() async {
     final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('user_role');
-    if (role != null) return role.toUpperCase() == 'OWNER';
+    final saved = prefs.getString('user_role');
+    if (saved != null && saved.isNotEmpty) return saved.toUpperCase();
 
-    // Fallback cek ke /auth/me jika role di prefs belum ada
     final me = await getCurrentUser();
     if (me != null && me['user'] is Map) {
-      return (me['user']['role'] ?? '').toString().toUpperCase() == 'OWNER';
+      final role = (me['user']['role'] ?? '').toString().toUpperCase();
+      if (role.isNotEmpty) await prefs.setString('user_role', role);
+      return role;
     }
-    return true; // Default aman
+    return 'OWNER';
+  }
+
+  // Cek apakah user yang sedang login adalah Owner
+  static Future<bool> isOwner() async {
+    return await currentRole() == 'OWNER';
   }
 
   // ---------- 🔐 Login ----------
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String email, String password) async {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/auth/login'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
-      )
+            Uri.parse('${AppConstants.baseUrl}/auth/login'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: jsonEncode({'email': email, 'password': password}),
+          )
           .timeout(const Duration(seconds: 8));
 
       final body = jsonDecode(response.body);
@@ -117,14 +133,27 @@ class ApiService {
         final data = body['data'];
         if (data != null) {
           final role = data['user']?['role']?.toString().toUpperCase() ?? '';
-          await _saveSession(Map<String, dynamic>.from(data), isStaff: role == 'STAFF');
+          await _saveSession(Map<String, dynamic>.from(data),
+              isStaff: role == 'STAFF');
         }
-        return {'success': true, 'message': body['message'] ?? 'Login berhasil', 'data': data};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Login berhasil',
+          'data': data
+        };
       }
-      return {'success': false, 'message': body['error'] ?? body['message'] ?? 'Login gagal', 'data': null};
+      return {
+        'success': false,
+        'message': body['error'] ?? body['message'] ?? 'Login gagal',
+        'data': null
+      };
     } catch (e) {
       debugPrint('Error login: $e');
-      return {'success': false, 'message': 'Terjadi kesalahan koneksi ke server.', 'data': null};
+      return {
+        'success': false,
+        'message': 'Terjadi kesalahan koneksi ke server.',
+        'data': null
+      };
     }
   }
 
@@ -132,15 +161,19 @@ class ApiService {
   static Future<bool> refreshAccessToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final refreshToken = prefs.getString('refresh_token') ?? prefs.getString('staff_refresh_token');
+      final refreshToken = prefs.getString('refresh_token') ??
+          prefs.getString('staff_refresh_token');
       if (refreshToken == null || refreshToken.isEmpty) return false;
 
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/auth/refresh'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: jsonEncode({'refresh_token': refreshToken}),
-      )
+            Uri.parse('${AppConstants.baseUrl}/auth/refresh'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: jsonEncode({'refresh_token': refreshToken}),
+          )
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
@@ -168,9 +201,9 @@ class ApiService {
     try {
       final response = await http
           .get(
-        Uri.parse('${AppConstants.baseUrl}/auth/me'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/auth/me'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -195,13 +228,15 @@ class ApiService {
         request.headers['Authorization'] = 'Bearer $token';
       }
 
-      final streamed = await request.send().timeout(const Duration(seconds: 20));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 20));
       final response = await http.Response.fromStream(streamed);
       final body = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final data = body['data'];
-        final photoPath = data != null ? data['profile_photo']?.toString() : null;
+        final photoPath =
+            data != null ? data['profile_photo']?.toString() : null;
 
         if (photoPath != null && photoPath.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
@@ -218,11 +253,15 @@ class ApiService {
 
       return {
         'success': false,
-        'message': body['message'] ?? body['error'] ?? 'Gagal mengunggah foto profil',
+        'message':
+            body['message'] ?? body['error'] ?? 'Gagal mengunggah foto profil',
       };
     } catch (e) {
       debugPrint('Error uploadProfilePhoto: $e');
-      return {'success': false, 'message': 'Terjadi kesalahan koneksi ke server.'};
+      return {
+        'success': false,
+        'message': 'Terjadi kesalahan koneksi ke server.'
+      };
     }
   }
 
@@ -231,7 +270,8 @@ class ApiService {
     if (path == null || path.isEmpty) return null;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
 
-    final serverRoot = AppConstants.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+    final serverRoot =
+        AppConstants.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
     return path.startsWith('/') ? '$serverRoot$path' : '$serverRoot/$path';
   }
 
@@ -241,9 +281,9 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/auth/logout'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/auth/logout'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       serverOk = response.statusCode == 200;
     } catch (e) {
@@ -264,25 +304,40 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/auth/register'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: jsonEncode({
-          'business_name': businessName,
-          'name': name,
-          'email': email,
-          'password': password,
-        }),
-      )
+            Uri.parse('${AppConstants.baseUrl}/auth/register'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: jsonEncode({
+              'business_name': businessName,
+              'name': name,
+              'email': email,
+              'password': password,
+            }),
+          )
           .timeout(const Duration(seconds: 8));
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Registrasi berhasil', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Registrasi berhasil',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['error'] ?? body['message'] ?? 'Registrasi gagal', 'data': null};
+      return {
+        'success': false,
+        'message': body['error'] ?? body['message'] ?? 'Registrasi gagal',
+        'data': null
+      };
     } catch (e) {
       debugPrint('Error registerOwner: $e');
-      return {'success': false, 'message': 'Terjadi kesalahan koneksi ke server.', 'data': null};
+      return {
+        'success': false,
+        'message': 'Terjadi kesalahan koneksi ke server.',
+        'data': null
+      };
     }
   }
 
@@ -298,34 +353,49 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/staff'),
-        headers: await _authHeaders(),
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-          'password': password,
-        }),
-      )
+            Uri.parse('${AppConstants.baseUrl}/staff'),
+            headers: await _authHeaders(),
+            body: jsonEncode({
+              'name': name,
+              'email': email,
+              'password': password,
+            }),
+          )
           .timeout(const Duration(seconds: 8));
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Staff berhasil dibuat', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Staff berhasil dibuat',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['error'] ?? body['message'] ?? 'Gagal membuat staff', 'data': null};
+      return {
+        'success': false,
+        'message': body['error'] ?? body['message'] ?? 'Gagal membuat staff',
+        'data': null
+      };
     } catch (e) {
       debugPrint('Error createStaff: $e');
-      return {'success': false, 'message': 'Terjadi kesalahan koneksi ke server.', 'data': null};
+      return {
+        'success': false,
+        'message': 'Terjadi kesalahan koneksi ke server.',
+        'data': null
+      };
     }
   }
 
   /// Mengambil daftar Staff (GET /staff?status=active|disabled|all) — hanya Owner
-  static Future<List<Map<String, dynamic>>> fetchStaff({String status = 'active'}) async {
+  static Future<List<Map<String, dynamic>>> fetchStaff(
+      {String status = 'active'}) async {
     try {
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/staff?status=$status'),
-        headers: await _authHeaders(),
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .get(
+            Uri.parse('${AppConstants.baseUrl}/staff?status=$status'),
+            headers: await _authHeaders(),
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -346,15 +416,21 @@ class ApiService {
     try {
       final response = await http
           .delete(
-        Uri.parse('${AppConstants.baseUrl}/staff/$staffId'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/staff/$staffId'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Staff berhasil dinonaktifkan'};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Staff berhasil dinonaktifkan'
+        };
       }
-      return {'success': false, 'message': body['message'] ?? 'Gagal menonaktifkan staff'};
+      return {
+        'success': false,
+        'message': body['message'] ?? 'Gagal menonaktifkan staff'
+      };
     } catch (e) {
       debugPrint('Error disableStaff: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -366,15 +442,22 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/staff/$staffId/restore'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/staff/$staffId/restore'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Staff berhasil diaktifkan', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Staff berhasil diaktifkan',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['message'] ?? 'Gagal memulihkan staff'};
+      return {
+        'success': false,
+        'message': body['message'] ?? 'Gagal memulihkan staff'
+      };
     } catch (e) {
       debugPrint('Error restoreStaff: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -383,13 +466,14 @@ class ApiService {
 
   // ---------- 💰 Wallets ----------
 
-  static Future<List<Map<String, dynamic>>> fetchWallets({String status = 'active'}) async {
+  static Future<List<Map<String, dynamic>>> fetchWallets(
+      {String status = 'active'}) async {
     try {
       final response = await http
           .get(
-        Uri.parse('${AppConstants.baseUrl}/wallets?status=$status'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/wallets?status=$status'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
@@ -403,21 +487,29 @@ class ApiService {
     return [];
   }
 
-  static Future<Map<String, dynamic>> createWallet({required String name}) async {
+  static Future<Map<String, dynamic>> createWallet(
+      {required String name}) async {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/wallets'),
-        headers: await _authHeaders(),
-        body: jsonEncode({'name': name}),
-      )
+            Uri.parse('${AppConstants.baseUrl}/wallets'),
+            headers: await _authHeaders(),
+            body: jsonEncode({'name': name}),
+          )
           .timeout(const Duration(seconds: 8));
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Wallet berhasil dibuat', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Wallet berhasil dibuat',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['message'] ?? 'Gagal membuat wallet'};
+      return {
+        'success': false,
+        'message': body['message'] ?? 'Gagal membuat wallet'
+      };
     } catch (e) {
       debugPrint('Error createWallet: $e');
       return {'success': false, 'message': 'Terjadi kesalahan koneksi'};
@@ -430,14 +522,16 @@ class ApiService {
     String currency = 'IDR',
   }) async {
     try {
-      final response = await http.put(
-        Uri.parse('${AppConstants.baseUrl}/wallets/$walletId'),
-        headers: await _authHeaders(),
-        body: jsonEncode({
-          'name': name,
-          'currency': currency,
-        }),
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .put(
+            Uri.parse('${AppConstants.baseUrl}/wallets/$walletId'),
+            headers: await _authHeaders(),
+            body: jsonEncode({
+              'name': name,
+              'currency': currency,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -457,9 +551,9 @@ class ApiService {
     try {
       final response = await http
           .delete(
-        Uri.parse('${AppConstants.baseUrl}/wallets/$id'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/wallets/$id'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       return response.statusCode == 200;
     } catch (e) {
@@ -472,9 +566,9 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/wallets/$id/restore'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/wallets/$id/restore'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       return response.statusCode == 200;
     } catch (e) {
@@ -485,13 +579,14 @@ class ApiService {
 
   // ---------- 🏷️ Categories ----------
 
-  static Future<List<Map<String, dynamic>>> fetchCategories({String status = 'active'}) async {
+  static Future<List<Map<String, dynamic>>> fetchCategories(
+      {String status = 'active'}) async {
     try {
       final response = await http
           .get(
-        Uri.parse('${AppConstants.baseUrl}/categories?status=$status'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/categories?status=$status'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
@@ -505,21 +600,29 @@ class ApiService {
     return [];
   }
 
-  static Future<Map<String, dynamic>> createCategory({required String name, required String type}) async {
+  static Future<Map<String, dynamic>> createCategory(
+      {required String name, required String type}) async {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/categories'),
-        headers: await _authHeaders(),
-        body: jsonEncode({'name': name, 'type': type}),
-      )
+            Uri.parse('${AppConstants.baseUrl}/categories'),
+            headers: await _authHeaders(),
+            body: jsonEncode({'name': name, 'type': type}),
+          )
           .timeout(const Duration(seconds: 8));
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Kategori berhasil dibuat', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Kategori berhasil dibuat',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['message'] ?? 'Gagal membuat kategori'};
+      return {
+        'success': false,
+        'message': body['message'] ?? 'Gagal membuat kategori'
+      };
     } catch (e) {
       debugPrint('Error createCategory: $e');
       return {'success': false, 'message': 'Terjadi kesalahan koneksi'};
@@ -530,9 +633,9 @@ class ApiService {
     try {
       final response = await http
           .delete(
-        Uri.parse('${AppConstants.baseUrl}/categories/$id'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/categories/$id'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       return response.statusCode == 200;
     } catch (e) {
@@ -545,9 +648,9 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/categories/$id/restore'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/categories/$id/restore'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       return response.statusCode == 200;
     } catch (e) {
@@ -582,10 +685,12 @@ class ApiService {
       if (walletId != null) params['wallet_id'] = walletId.toString();
       if (categoryId != null) params['category_id'] = categoryId.toString();
       if (creatorId != null) params['creator_id'] = creatorId.toString();
-      if (fromDate != null && fromDate.isNotEmpty) params['from_date'] = fromDate;
+      if (fromDate != null && fromDate.isNotEmpty)
+        params['from_date'] = fromDate;
       if (toDate != null && toDate.isNotEmpty) params['to_date'] = toDate;
 
-      final uri = Uri.parse('${AppConstants.baseUrl}/transactions').replace(queryParameters: params);
+      final uri = Uri.parse('${AppConstants.baseUrl}/transactions')
+          .replace(queryParameters: params);
 
       final response = await http
           .get(uri, headers: await _authHeaders())
@@ -593,7 +698,11 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return {'success': true, 'data': body['data'] ?? [], 'meta': body['meta']};
+        return {
+          'success': true,
+          'data': body['data'] ?? [],
+          'meta': body['meta']
+        };
       }
       return {'success': false, 'message': 'Gagal mengambil transaksi'};
     } catch (e) {
@@ -672,9 +781,11 @@ class ApiService {
         if (date != null && date.isNotEmpty) {
           request.fields['date'] = date;
         }
-        request.files.add(await http.MultipartFile.fromPath('photos', photoFile.path));
+        request.files
+            .add(await http.MultipartFile.fromPath('photos', photoFile.path));
 
-        final streamed = await request.send().timeout(const Duration(seconds: 15));
+        final streamed =
+            await request.send().timeout(const Duration(seconds: 15));
         response = await http.Response.fromStream(streamed);
       } else {
         final Map<String, dynamic> payload = {
@@ -682,24 +793,33 @@ class ApiService {
           'category_id': categoryId,
           'amount': roundedAmount,
           'type': type,
-          if (description != null && description.trim().isNotEmpty) 'description': description.trim(),
+          if (description != null && description.trim().isNotEmpty)
+            'description': description.trim(),
           if (date != null && date.isNotEmpty) 'date': date,
         };
 
         response = await http
             .post(
-          Uri.parse('${AppConstants.baseUrl}/transactions'),
-          headers: headers,
-          body: jsonEncode(payload),
-        )
+              Uri.parse('${AppConstants.baseUrl}/transactions'),
+              headers: headers,
+              body: jsonEncode(payload),
+            )
             .timeout(const Duration(seconds: 8));
       }
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Transaksi berhasil disimpan', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Transaksi berhasil disimpan',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['message'] ?? body['error'] ?? 'Gagal menyimpan transaksi'};
+      return {
+        'success': false,
+        'message':
+            body['message'] ?? body['error'] ?? 'Gagal menyimpan transaksi'
+      };
     } catch (e) {
       debugPrint('Error createTransaction: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -728,17 +848,25 @@ class ApiService {
 
       final response = await http
           .put(
-        Uri.parse('${AppConstants.baseUrl}/transactions/$transactionId'),
-        headers: await _authHeaders(),
-        body: jsonEncode(payload),
-      )
+            Uri.parse('${AppConstants.baseUrl}/transactions/$transactionId'),
+            headers: await _authHeaders(),
+            body: jsonEncode(payload),
+          )
           .timeout(const Duration(seconds: 8));
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Transaksi berhasil diperbarui', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Transaksi berhasil diperbarui',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['message'] ?? body['error'] ?? 'Gagal memperbarui transaksi'};
+      return {
+        'success': false,
+        'message':
+            body['message'] ?? body['error'] ?? 'Gagal memperbarui transaksi'
+      };
     } catch (e) {
       debugPrint('Error updateTransaction: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -750,15 +878,21 @@ class ApiService {
     try {
       final response = await http
           .delete(
-        Uri.parse('${AppConstants.baseUrl}/transactions/$id'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/transactions/$id'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Transaksi dibatalkan'};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Transaksi dibatalkan'
+        };
       }
-      return {'success': false, 'message': body['message'] ?? 'Gagal membatalkan'};
+      return {
+        'success': false,
+        'message': body['message'] ?? 'Gagal membatalkan'
+      };
     } catch (e) {
       debugPrint('Error voidTransaction: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -770,15 +904,22 @@ class ApiService {
     try {
       final response = await http
           .post(
-        Uri.parse('${AppConstants.baseUrl}/transactions/$id/restore'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/transactions/$id/restore'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Transaksi dipulihkan', 'data': body['data']};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Transaksi dipulihkan',
+          'data': body['data']
+        };
       }
-      return {'success': false, 'message': body['message'] ?? 'Gagal memulihkan'};
+      return {
+        'success': false,
+        'message': body['message'] ?? 'Gagal memulihkan'
+      };
     } catch (e) {
       debugPrint('Error restoreTransaction: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -793,15 +934,23 @@ class ApiService {
     try {
       final response = await http
           .delete(
-        Uri.parse('${AppConstants.baseUrl}/transactions/$transactionId/photos/$photoId'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse(
+                '${AppConstants.baseUrl}/transactions/$transactionId/photos/$photoId'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
       final body = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Foto transaksi berhasil dihapus'};
+        return {
+          'success': true,
+          'message': body['message'] ?? 'Foto transaksi berhasil dihapus'
+        };
       }
-      return {'success': false, 'message': body['message'] ?? body['error'] ?? 'Gagal menghapus foto transaksi'};
+      return {
+        'success': false,
+        'message':
+            body['message'] ?? body['error'] ?? 'Gagal menghapus foto transaksi'
+      };
     } catch (e) {
       debugPrint('Error deleteTransactionPhoto: $e');
       return {'success': false, 'message': 'Kesalahan koneksi'};
@@ -814,9 +963,9 @@ class ApiService {
     try {
       final response = await http
           .get(
-        Uri.parse('${AppConstants.baseUrl}/dashboard/summary'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/dashboard/summary'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
@@ -831,13 +980,14 @@ class ApiService {
 
   /// GET /reports/monthly?year=YYYY — mengembalikan 12 bulan
   /// Setiap entri: { month, income, expense, net_cashflow }
-  static Future<List<Map<String, dynamic>>> getMonthlyReport({required int year}) async {
+  static Future<List<Map<String, dynamic>>> getMonthlyReport(
+      {required int year}) async {
     try {
       final response = await http
           .get(
-        Uri.parse('${AppConstants.baseUrl}/reports/monthly?year=$year'),
-        headers: await _authHeaders(),
-      )
+            Uri.parse('${AppConstants.baseUrl}/reports/monthly?year=$year'),
+            headers: await _authHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {

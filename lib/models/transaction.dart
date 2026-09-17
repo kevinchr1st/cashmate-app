@@ -1,3 +1,5 @@
+import '../utils/string_utils.dart';
+
 /// Model transaksi yang sesuai kontrak API Postman.
 /// Parse semua field dari response: id, business_id, wallet_id, category_id,
 /// created_by_user_id, amount, type, description, date, timestamps,
@@ -59,19 +61,22 @@ class Transaction {
     // Parse nested wallet
     TransactionWallet? wallet;
     if (json['wallet'] is Map) {
-      wallet = TransactionWallet.fromJson(Map<String, dynamic>.from(json['wallet']));
+      wallet =
+          TransactionWallet.fromJson(Map<String, dynamic>.from(json['wallet']));
     }
 
     // Parse nested category
     TransactionCategory? category;
     if (json['category'] is Map) {
-      category = TransactionCategory.fromJson(Map<String, dynamic>.from(json['category']));
+      category = TransactionCategory.fromJson(
+          Map<String, dynamic>.from(json['category']));
     }
 
     // Parse nested created_by
     TransactionCreator? createdBy;
     if (json['created_by'] is Map) {
-      createdBy = TransactionCreator.fromJson(Map<String, dynamic>.from(json['created_by']));
+      createdBy = TransactionCreator.fromJson(
+          Map<String, dynamic>.from(json['created_by']));
     }
 
     // Parse photos array
@@ -103,12 +108,13 @@ class Transaction {
     );
   }
 
-  /// Nama tampilan: deskripsi > kategori > fallback
+  /// Nama tampilan: deskripsi > kategori > fallback.
+  /// Teks dari API di-decode entitas HTML-nya (&gt; → >) agar judul bersih.
   String get displayTitle {
-    if (description.trim().isNotEmpty) return description.trim();
+    if (description.trim().isNotEmpty) return htmlUnescape(description.trim());
     if (category != null && category!.name.isNotEmpty) {
       final prefix = type == 'income' ? 'Pemasukan' : 'Pengeluaran';
-      return '$prefix • ${category!.name}';
+      return '$prefix • ${htmlUnescape(category!.name)}';
     }
     return 'Transaksi Tanpa Keterangan';
   }
@@ -150,7 +156,9 @@ class TransactionWallet {
       businessId: Transaction._parseInt(json['business_id']),
       name: (json['name'] ?? '').toString(),
       currency: (json['currency'] ?? 'IDR').toString(),
-      balance: json['balance'] != null ? Transaction._parseDouble(json['balance']) : null,
+      balance: json['balance'] != null
+          ? Transaction._parseDouble(json['balance'])
+          : null,
     );
   }
 }
@@ -172,7 +180,9 @@ class TransactionCategory {
   factory TransactionCategory.fromJson(Map<String, dynamic> json) {
     return TransactionCategory(
       id: Transaction._parseInt(json['id']),
-      businessId: json['business_id'] != null ? Transaction._parseInt(json['business_id']) : null,
+      businessId: json['business_id'] != null
+          ? Transaction._parseInt(json['business_id'])
+          : null,
       name: (json['name'] ?? '').toString(),
       type: (json['type'] ?? 'income').toString(),
     );

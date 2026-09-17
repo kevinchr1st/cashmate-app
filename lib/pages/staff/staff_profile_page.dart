@@ -1,12 +1,17 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/api_service.dart';
+
 import '../../main.dart';
+import '../../services/api_service.dart';
+import '../../utils/app_theme.dart';
+import '../../widgets/app_badge.dart';
+import '../../widgets/app_card.dart';
 
 /// Halaman profil/akun Staff CashMate:
-/// Memungkinkan Staff melihat data akun, mengubah foto profil (via Kamera/Galeri),
+/// melihat data akun, mengubah foto profil (Kamera/Galeri),
 /// mengubah mode tema, dan logout.
 class StaffProfilePage extends StatefulWidget {
   final int userId;
@@ -17,9 +22,6 @@ class StaffProfilePage extends StatefulWidget {
 }
 
 class _StaffProfilePageState extends State<StaffProfilePage> {
-  static const _blue = Color(0xFF0D6EFD);
-  static const _amber = Color(0xFFFFB800);
-
   String staffName = '';
   String staffEmail = '';
   String businessName = '';
@@ -43,8 +45,9 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
         if (user['name'] != null) staffName = user['name'].toString();
         if (user['email'] != null) staffEmail = user['email'].toString();
         if (user['role'] != null) userRole = user['role'].toString().toUpperCase();
-        if (user['profile_photo'] != null && user['profile_photo'].toString().isNotEmpty) {
-          profilePhotoUrl = ApiService.resolvePhotoUrl(user['profile_photo'].toString());
+        final photo = (user['profile_photo'] ?? '').toString();
+        if (photo.isNotEmpty) {
+          profilePhotoUrl = ApiService.resolvePhotoUrl(photo);
         }
       }
       final business = me['business'];
@@ -71,93 +74,79 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
       if (!mounted) return;
       setState(() => isUploading = false);
 
-      if (result['success'] == true) {
+      final success = result['success'] == true;
+      if (success) {
         final newUrl = result['photo_url']?.toString();
         setState(() {
           if (newUrl != null && newUrl.isNotEmpty) {
             profilePhotoUrl = newUrl;
           }
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Foto profil berhasil diperbarui'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Gagal mengunggah foto profil'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          success
+              ? result['message'] ?? 'Foto profil berhasil diperbarui'
+              : result['message'] ?? 'Gagal mengunggah foto profil',
+        ),
+        backgroundColor: success ? AppColors.success : AppColors.danger,
+      ));
     } catch (e) {
       if (!mounted) return;
       setState(() => isUploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memilih foto: $e'), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal memilih foto: $e'),
+        backgroundColor: AppColors.danger,
+      ));
     }
   }
 
   void _showPhotoSourceBottomSheet() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        final theme = Theme.of(context);
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: theme.hintColor.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Ubah Foto Profil Staff',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _photoOptionTile(
-                      icon: Icons.camera_alt_rounded,
-                      label: 'Kamera',
-                      color: _blue,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _pickAndUploadPhoto(ImageSource.camera);
-                      },
-                    ),
-                    _photoOptionTile(
-                      icon: Icons.photo_library_rounded,
-                      label: 'Galeri Foto',
-                      color: _amber,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _pickAndUploadPhoto(ImageSource.gallery);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.lg,
+            horizontal: AppSpacing.lg,
           ),
-        );
-      },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ubah Foto Profil Staff',
+                style: AppTextStyles.title.copyWith(
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _photoOptionTile(
+                    icon: Icons.camera_alt_rounded,
+                    label: 'Kamera',
+                    color: AppColors.primary,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickAndUploadPhoto(ImageSource.camera);
+                    },
+                  ),
+                  _photoOptionTile(
+                    icon: Icons.photo_library_rounded,
+                    label: 'Galeri Foto',
+                    color: AppColors.accent,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickAndUploadPhoto(ImageSource.gallery);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -169,20 +158,23 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
         width: 120,
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
             Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
-            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              label,
+              style: AppTextStyles.subheading.copyWith(color: color),
+            ),
           ],
         ),
       ),
@@ -194,9 +186,11 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_dark_mode', isDark);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(isDark ? 'Mode Gelap Diaktifkan' : 'Mode Terang Diaktifkan')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          isDark ? 'Mode Gelap Diaktifkan' : 'Mode Terang Diaktifkan',
+        ),
+      ));
     }
   }
 
@@ -204,21 +198,28 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.rMd),
         title: const Text('Keluar Akun'),
         content: const Text('Apakah Anda yakin ingin keluar dari akun CashMate?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCE8E6)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await ApiService.logout();
               if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/login',
+                  (route) => false,
+                );
               }
             },
-            child: const Text('Keluar', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: const Text('Keluar'),
           ),
         ],
       ),
@@ -233,43 +234,17 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: theme.cardColor,
-        elevation: 0.5,
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: _blue, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 8),
-            Text('Profil Staff', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
-          ],
-        ),
+        title: const Text('Profil Staff'),
       ),
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: _loadStaffInfo,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+          padding: AppSpacing.pagePadding,
           children: [
-            // ---- Card Identitas & Foto Profil ----
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDark
-                      ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-                      : [Colors.white, const Color(0xFFF8FAFC)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _blue.withValues(alpha: 0.2)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
-                ],
-              ),
+            // ---- Kartu Identitas & Foto Profil ----
+            AppCard(
+              padding: const EdgeInsets.all(AppSpacing.xl),
               child: Column(
                 children: [
                   Stack(
@@ -279,22 +254,32 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
                         child: Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: _blue, width: 2.5),
+                            border: Border.all(
+                              color: isDark
+                                  ? AppColors.primary.lighten(0.3)
+                                  : AppColors.primary,
+                              width: 2.5,
+                            ),
                           ),
                           child: CircleAvatar(
                             radius: 42,
-                            backgroundColor: _blue.withValues(alpha: 0.12),
+                            backgroundColor: AppColors.primarySoft,
                             backgroundImage: (profilePhotoUrl != null && profilePhotoUrl!.isNotEmpty)
                                 ? NetworkImage(profilePhotoUrl!)
                                 : null,
                             child: isUploading
-                                ? const CircularProgressIndicator(color: _blue)
+                                ? const CircularProgressIndicator(color: AppColors.primary)
                                 : (profilePhotoUrl == null || profilePhotoUrl!.isEmpty)
-                                ? Text(
-                              staffName.isNotEmpty ? staffName[0].toUpperCase() : 'S',
-                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: _blue),
-                            )
-                                : null,
+                                    ? Text(
+                                        staffName.isNotEmpty
+                                            ? staffName[0].toUpperCase()
+                                            : 'S',
+                                        style: AppTextStyles.title.copyWith(
+                                          color: AppColors.primary,
+                                          fontSize: 32,
+                                        ),
+                                      )
+                                    : null,
                           ),
                         ),
                       ),
@@ -305,201 +290,228 @@ class _StaffProfilePageState extends State<StaffProfilePage> {
                           onTap: isUploading ? null : _showPhotoSourceBottomSheet,
                           child: Container(
                             padding: const EdgeInsets.all(7),
-                            decoration: const BoxDecoration(
-                              color: _amber,
+                            decoration: BoxDecoration(
+                              color: AppColors.accent,
                               shape: BoxShape.circle,
-                              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 4,
+                                ),
+                              ],
                             ),
-                            child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   Text(
                     staffName.isNotEmpty ? staffName : 'Staff Kasir',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color),
+                    style: AppTextStyles.title.copyWith(
+                      color: theme.textTheme.bodyLarge?.color,
+                    ),
                   ),
                   const SizedBox(height: 2),
-                  Text(staffEmail, style: TextStyle(fontSize: 12, color: theme.hintColor)),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Text(
+                    staffEmail,
+                    style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: AppSpacing.sm + 2),
+                  Wrap(
+                    spacing: AppSpacing.sm,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _blue.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _blue.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.badge_outlined, size: 12, color: _blue),
-                            const SizedBox(width: 4),
-                            Text(
-                              userRole,
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _blue),
-                            ),
-                          ],
-                        ),
+                      AppBadge(
+                        label: userRole,
+                        color: AppColors.primary,
+                        icon: Icons.badge_outlined,
                       ),
-                      if (businessName.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _amber.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _amber.withValues(alpha: 0.4)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.storefront_rounded, size: 12, color: _amber),
-                              const SizedBox(width: 4),
-                              Text(
-                                businessName,
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _amber),
-                              ),
-                            ],
-                          ),
+                      if (businessName.isNotEmpty)
+                        AppBadge(
+                          label: businessName,
+                          color: AppColors.accent,
+                          icon: Icons.storefront_rounded,
                         ),
-                      ],
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.lg),
                   OutlinedButton.icon(
                     onPressed: _showPhotoSourceBottomSheet,
-                    icon: const Icon(Icons.edit, size: 14, color: _blue),
-                    label: const Text('Ganti Foto Profil', style: TextStyle(fontSize: 12, color: _blue, fontWeight: FontWeight.bold)),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: _blue.withValues(alpha: 0.5)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
+                    icon: const Icon(Icons.edit, size: 14),
+                    label: const Text('Ganti Foto Profil'),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.lg),
 
-            // ---- Pengaturan & Aplikasi ----
-            Text('Pengaturan Aplikasi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.hintColor)),
-            const SizedBox(height: 10),
-
-            Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
-              ),
-              child: SwitchListTile(
-                secondary: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _blue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+            // ---- Pengaturan Aplikasi ----
+            AppSectionHeaderWrapper(
+              title: 'Pengaturan Aplikasi',
+              child: AppCard(
+                padding: EdgeInsets.zero,
+                child: SwitchListTile(
+                  secondary: AppIconBadgeBox(
+                    icon: isDark ? Icons.dark_mode : Icons.light_mode,
+                    color: AppColors.primary,
                   ),
-                  child: Icon(isDark ? Icons.dark_mode : Icons.light_mode, color: _blue, size: 20),
+                  title: Text(
+                    'Mode Gelap',
+                    style: AppTextStyles.subheading.copyWith(
+                      color: theme.textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isDark ? 'Tema gelap aktif' : 'Tema terang aktif',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  value: isDark,
+                  onChanged: _changeThemeMode,
                 ),
-                title: Text('Mode Gelap', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: theme.textTheme.bodyLarge?.color)),
-                subtitle: Text(isDark ? 'Tema gelap aktif' : 'Tema terang aktif', style: TextStyle(fontSize: 11, color: theme.hintColor)),
-                value: isDark,
-                onChanged: _changeThemeMode,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.lg),
 
             // ---- Petunjuk Kasir ----
-            Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
-              ),
+            AppCard(
+              padding: EdgeInsets.zero,
+              onTap: () => _showGuideDialog(theme),
               child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.help_outline_rounded, color: Colors.teal, size: 20),
+                leading: AppIconBadgeBox(
+                  icon: Icons.help_outline_rounded,
+                  color: AppColors.info,
                 ),
-                title: Text('Panduan Staff / Kasir', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: theme.textTheme.bodyLarge?.color)),
-                subtitle: Text('Cara mencatat transaksi & upload nota', style: TextStyle(fontSize: 11, color: theme.hintColor)),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (dialogCtx) => AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      title: const Text('Panduan Kasir CashMate'),
-                      content: const SingleChildScrollView(
-                        child: Text(
-                          '1. Pilih tombol "+ Catat Pemasukan" atau "- Catat Pengeluaran" di Beranda.\n\n'
-                              '2. Pilih Dompet (Cash, Transfer, QRIS) dan Kategori yang sesuai.\n\n'
-                              '3. Masukkan jumlah nominal dan deskripsi singkat.\n\n'
-                              '4. Anda bisa melampirkan foto nota dengan menekan ikon Kamera saat membuat transaksi.\n\n'
-                              '5. Transaksi yang Anda catat hari ini dapat dilihat pada tab "Aktivitas".',
-                          style: TextStyle(fontSize: 13, height: 1.4),
-                        ),
-                      ),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Mengerti')),
-                      ],
-                    ),
-                  );
-                },
+                title: Text(
+                  'Panduan Staff / Kasir',
+                  style: AppTextStyles.subheading.copyWith(
+                    color: theme.textTheme.bodyLarge?.color,
+                  ),
+                ),
+                subtitle: Text(
+                  'Cara mencatat transaksi & upload nota',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded, size: 20),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.lg),
 
             // ---- Logout ----
-            Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
-              ),
+            AppCard(
+              padding: EdgeInsets.zero,
+              color: AppColors.danger.withValues(alpha: 0.06),
+              bordered: false,
+              shadowed: false,
+              onTap: _showLogoutConfirmation,
               child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.logout, color: Colors.red, size: 20),
+                leading: AppIconBadgeBox(
+                  icon: Icons.logout_rounded,
+                  color: AppColors.danger,
                 ),
-                title: const Text('Keluar Akun', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: Colors.red)),
-                subtitle: Text('Logout dari akun Staff CashMate', style: TextStyle(fontSize: 11, color: theme.hintColor)),
-                trailing: const Icon(Icons.chevron_right, color: Colors.red, size: 20),
-                onTap: _showLogoutConfirmation,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                title: Text(
+                  'Keluar Akun',
+                  style: AppTextStyles.subheading.copyWith(color: AppColors.danger),
+                ),
+                subtitle: Text(
+                  'Logout dari akun Staff CashMate',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.danger,
+                  size: 20,
+                ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
 
             Center(
-              child: Column(
-                children: [
-                  RichText(
-                    text: const TextSpan(
-                      children: [
-                        TextSpan(text: 'Cash', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _blue)),
-                        TextSpan(text: 'Mate', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _amber)),
-                        TextSpan(text: ' Staff v1.0.0', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                ],
+              child: Text(
+                'CashMate Staff v1.0.0',
+                style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showGuideDialog(ThemeData theme) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.rMd),
+        title: const Text('Panduan Kasir CashMate'),
+        content: const SingleChildScrollView(
+          child: Text(
+            '1. Pilih tombol "+ Catat Pemasukan" atau "- Catat Pengeluaran" di Beranda.\n\n'
+            '2. Pilih Dompet (Cash, Transfer, QRIS) dan Kategori yang sesuai.\n\n'
+            '3. Masukkan jumlah nominal dan deskripsi singkat.\n\n'
+            '4. Anda bisa melampirkan foto nota dengan menekan ikon Kamera saat membuat transaksi.\n\n'
+            '5. Transaksi yang Anda catat hari ini dapat dilihat pada tab "Aktivitas".',
+            style: TextStyle(fontSize: 13, height: 1.4),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Mengerti'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Helper mini untuk keep widget ringan tanpa harus mengimpor header stok.
+class AppSectionHeaderWrapper extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const AppSectionHeaderWrapper({super.key, required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: AppTextStyles.subheading.copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        child,
+      ],
+    );
+  }
+}
+
+/// Kotak ikon kecil di dalam ListTile.
+class AppIconBadgeBox extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+
+  const AppIconBadgeBox({super.key, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }

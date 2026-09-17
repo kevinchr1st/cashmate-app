@@ -3,7 +3,6 @@ import '../../models/transaction.dart';
 import '../../models/wallet.dart';
 import '../../models/category.dart';
 import '../../services/api_service.dart';
-import 'category_page.dart';
 import 'wallet_page.dart';
 import '../add_transaction_page.dart';
 
@@ -540,7 +539,7 @@ class _TransactionPageState extends State<TransactionPage> {
               ? Colors.red
               : _primaryBlue;
           return GestureDetector(
-            onTap: () => _onTypeFilterChanged(opt['value'] as String?),
+            onTap: () => _onTypeFilterChanged(opt['value']),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
