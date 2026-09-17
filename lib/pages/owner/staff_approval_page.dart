@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 
-/// Halaman khusus Owner untuk Mengelola & Menambahkan Staff baru
-/// dengan memasukkan Nama, Email, dan Password sementara.
+/// Halaman Owner untuk mengelola Staff: melihat daftar (aktif/nonaktif/semua),
+/// menambah Staff baru, menonaktifkan, dan memulihkan.
 class StaffApprovalPage extends StatefulWidget {
   const StaffApprovalPage({super.key});
 
@@ -11,9 +11,14 @@ class StaffApprovalPage extends StatefulWidget {
 }
 
 class _StaffApprovalPageState extends State<StaffApprovalPage> {
+  static const _primaryBlue = Color(0xFF1155D9);
+
   List<Map<String, dynamic>> staffList = [];
   bool isLoading = true;
   final Set<int> _processingIds = {};
+
+  // Filter status: active, disabled, all
+  String _statusFilter = 'active';
 
   @override
   void initState() {
@@ -23,8 +28,7 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
 
   Future<void> _loadStaffList() async {
     setState(() => isLoading = true);
-    // Mengambil daftar staff atau staff pending dari API service
-    final result = await ApiService.fetchPendingStaff();
+    final result = await ApiService.fetchStaff(status: _statusFilter);
     if (!mounted) return;
     setState(() {
       staffList = result;
@@ -32,7 +36,13 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
     });
   }
 
-  // Dialog untuk Menambahkan Staff Baru (Nama, Email, Password Sementara)
+  void _onStatusFilterChanged(String status) {
+    if (_statusFilter == status) return;
+    setState(() => _statusFilter = status);
+    _loadStaffList();
+  }
+
+  // ---- Tambah Staff Baru ----
   void _showAddStaffDialog() {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
@@ -44,13 +54,13 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Tambah Staff / Kasir Baru', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          title: const Text('Tambah Staff Baru', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Masukkan data di bawah ini agar staff dapat langsung login ke aplikasi menggunakan email & password sementara.',
+                  'Masukkan data di bawah ini agar Staff dapat langsung login ke aplikasi menggunakan email & password.',
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 const SizedBox(height: 14),
@@ -68,7 +78,10 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
                 TextField(
                   controller: passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password Sementara', prefixIcon: Icon(Icons.lock)),
+                  decoration: const InputDecoration(
+                    labelText: 'Password (min. 8 karakter)',
+                    prefixIcon: Icon(Icons.lock),
+                  ),
                 ),
               ],
             ),
@@ -79,7 +92,7 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1155D9)),
+              style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue),
               onPressed: isSaving
                   ? null
                   : () async {
@@ -94,26 +107,26 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
                   return;
                 }
 
-                if (password.length < 6) {
+                // API meminta minimal 8 karakter password
+                if (password.length < 8) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Password minimal 6 karakter!')),
+                    const SnackBar(content: Text('Password minimal 8 karakter!')),
                   );
                   return;
                 }
 
                 setDialogState(() => isSaving = true);
 
-                // Memanggil API untuk mendaftarkan staff baru
-                final result = await ApiService.registerOwner(
+                // POST /staff — buat Staff, bukan registerOwner
+                final result = await ApiService.createStaff(
                   name: name,
                   email: email,
                   password: password,
-                  businessName: 'Staff Account',
                 );
 
                 setDialogState(() => isSaving = false);
 
-                if (result['success'] == true || result['token'] != null) {
+                if (result['success'] == true) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Staff baru berhasil ditambahkan!')),
@@ -121,7 +134,7 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
                   await _loadStaffList();
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(result['message'] ?? 'Gagal menambahkan staff.')),
+                    SnackBar(content: Text(result['message'] ?? 'Gagal menambahkan Staff.')),
                   );
                 }
               },
@@ -135,17 +148,19 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
     );
   }
 
-  Future<void> _handleDeleteStaff(int staffId) async {
+  // ---- Nonaktifkan Staff (soft delete) ----
+  Future<void> _handleDisableStaff(int staffId, String staffName) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Akses Staff?'),
-        content: const Text('Akun staff ini akan dihapus permanen dari sistem toko.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Nonaktifkan Staff?'),
+        content: Text('Staff "$staffName" akan dinonaktifkan dan tidak bisa login. Histori transaksi tetap tersimpan.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: const Text('Nonaktifkan', style: TextStyle(color: Colors.orange)),
           ),
         ],
       ),
@@ -153,17 +168,59 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
     if (confirm != true) return;
 
     setState(() => _processingIds.add(staffId));
-    final success = await ApiService.rejectStaff(staffId);
+    final result = await ApiService.disableStaff(staffId);
     if (!mounted) return;
 
-    setState(() {
-      staffList.removeWhere((s) => s['id'] == staffId);
-      _processingIds.remove(staffId);
-    });
+    setState(() => _processingIds.remove(staffId));
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(success ? 'Akses staff berhasil dihapus.' : 'Gagal menghapus staff.')),
+      SnackBar(
+        content: Text(result['success'] == true
+            ? 'Staff berhasil dinonaktifkan.'
+            : (result['message'] ?? 'Gagal menonaktifkan Staff.')),
+      ),
     );
+    if (result['success'] == true) await _loadStaffList();
+  }
+
+  // ---- Pulihkan Staff ----
+  Future<void> _handleRestoreStaff(int staffId, String staffName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Pulihkan Staff?'),
+        content: Text('Staff "$staffName" akan diaktifkan kembali dan dapat login.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Pulihkan', style: TextStyle(color: Colors.green)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _processingIds.add(staffId));
+    final result = await ApiService.restoreStaff(staffId);
+    if (!mounted) return;
+
+    setState(() => _processingIds.remove(staffId));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result['success'] == true
+            ? 'Staff berhasil dipulihkan.'
+            : (result['message'] ?? 'Gagal memulihkan Staff.')),
+      ),
+    );
+    if (result['success'] == true) await _loadStaffList();
+  }
+
+  bool _isStaffDisabled(Map<String, dynamic> staff) {
+    final deletedAt = staff['deleted_at'];
+    return deletedAt != null && deletedAt.toString().isNotEmpty && deletedAt.toString() != 'null';
   }
 
   @override
@@ -177,95 +234,185 @@ class _StaffApprovalPageState extends State<StaffApprovalPage> {
         elevation: 0,
         iconTheme: IconThemeData(color: theme.textTheme.bodyLarge?.color),
         title: Text(
-          'Manajemen & Tambah Staff',
+          'Manajemen Staff',
           style: TextStyle(color: theme.textTheme.bodyLarge?.color, fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddStaffDialog,
-        backgroundColor: const Color(0xFF1155D9),
+        backgroundColor: _primaryBlue,
         icon: const Icon(Icons.person_add, color: Colors.white),
         label: const Text('Tambah Staff', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
       body: RefreshIndicator(
         onRefresh: _loadStaffList,
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : staffList.isEmpty
-            ? ListView(
+        child: Column(
           children: [
-            SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-            Center(
-              child: Column(
+            // ---- Status filter chips ----
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
                 children: [
-                  Icon(Icons.group_outlined, size: 48, color: theme.hintColor),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Belum ada staff terdaftar',
-                    style: TextStyle(color: theme.hintColor, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Ketuk tombol "Tambah Staff" di bawah untuk mendaftarkan kasir.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
+                  _filterChip('Aktif', 'active', theme),
+                  const SizedBox(width: 8),
+                  _filterChip('Nonaktif', 'disabled', theme),
+                  const SizedBox(width: 8),
+                  _filterChip('Semua', 'all', theme),
                 ],
               ),
             ),
-          ],
-        )
-            : ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: staffList.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, index) {
-            final staff = staffList[index];
-            final int staffId = staff['id'];
-            final bool isProcessing = _processingIds.contains(staffId);
-
-            return Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
-              ),
-              child: Row(
+            const SizedBox(height: 8),
+            // ---- Content ----
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : staffList.isEmpty
+                  ? ListView(
                 children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: const Color(0xFF1155D9).withOpacity(0.15),
-                    child: const Icon(Icons.person, color: Color(0xFF1155D9)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                  Center(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Icon(Icons.group_outlined, size: 48, color: theme.hintColor),
+                        const SizedBox(height: 12),
                         Text(
-                          staff['name'] ?? '-',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: theme.textTheme.bodyLarge?.color),
+                          _statusFilter == 'active'
+                              ? 'Belum ada Staff aktif'
+                              : _statusFilter == 'disabled'
+                              ? 'Tidak ada Staff nonaktif'
+                              : 'Belum ada Staff terdaftar',
+                          style: TextStyle(color: theme.hintColor, fontSize: 13),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          staff['email'] ?? '-',
-                          style: TextStyle(fontSize: 12, color: theme.hintColor),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Ketuk tombol "Tambah Staff" untuk mendaftarkan Staff baru.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
                         ),
                       ],
                     ),
                   ),
-                  isProcessing
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => _handleDeleteStaff(staffId),
-                    tooltip: 'Hapus Akses',
-                  ),
                 ],
+              )
+                  : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: staffList.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final staff = staffList[index];
+                  return _buildStaffTile(staff, theme);
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, String value, ThemeData theme) {
+    final selected = _statusFilter == value;
+    return GestureDetector(
+      onTap: () => _onStatusFilterChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? _primaryBlue : theme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? _primaryBlue : theme.dividerColor.withOpacity(0.2)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : theme.textTheme.bodyLarge?.color,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStaffTile(Map<String, dynamic> staff, ThemeData theme) {
+    final int staffId = staff['id'];
+    final String staffName = staff['name'] ?? '-';
+    final bool isProcessing = _processingIds.contains(staffId);
+    final bool isDisabled = _isStaffDisabled(staff);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: isDisabled
+                ? Colors.grey.withOpacity(0.15)
+                : _primaryBlue.withOpacity(0.15),
+            child: Icon(
+              Icons.person,
+              color: isDisabled ? Colors.grey : _primaryBlue,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        staffName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isDisabled ? theme.hintColor : theme.textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                    ),
+                    if (isDisabled) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'NONAKTIF',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  staff['email'] ?? '-',
+                  style: TextStyle(fontSize: 12, color: theme.hintColor),
+                ),
+              ],
+            ),
+          ),
+          if (isProcessing)
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+          else if (isDisabled)
+            IconButton(
+              icon: const Icon(Icons.restore, color: Colors.green),
+              onPressed: () => _handleRestoreStaff(staffId, staffName),
+              tooltip: 'Pulihkan Staff',
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.person_off_outlined, color: Colors.orange),
+              onPressed: () => _handleDisableStaff(staffId, staffName),
+              tooltip: 'Nonaktifkan Staff',
+            ),
+        ],
       ),
     );
   }

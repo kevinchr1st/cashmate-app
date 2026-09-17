@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 
+/// Daftar transaksi Staff hari ini dengan filter pemasukan/pengeluaran.
+/// Staff API hanya mengembalikan transaksi milik sendiri hari ini.
 class StaffActivityPage extends StatefulWidget {
   const StaffActivityPage({super.key});
 
@@ -9,9 +11,10 @@ class StaffActivityPage extends StatefulWidget {
 }
 
 class _StaffActivityPageState extends State<StaffActivityPage> {
+  static const _blue = Color(0xFF0D6EFD);
+
   List<Map<String, dynamic>> _allTransactions = [];
   bool _isLoading = true;
-  String _searchQuery = '';
   String _selectedFilter = 'semua'; // 'semua', 'income', 'expense'
 
   @override
@@ -31,31 +34,27 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
     });
   }
 
-  double get _totalMasukKasir {
-    return _allTransactions
-        .where((t) => (t['type']?.toString().toLowerCase() ?? '') == 'income')
-        .fold(0.0, (sum, t) => sum + (double.tryParse(t['amount'].toString()) ?? 0));
-  }
-
-  double get _totalMasukLaci => _totalMasukKasir * 0.55;
-  double get _totalMasukQris => _totalMasukKasir * 0.45;
-
   List<Map<String, dynamic>> get _filteredTransactions {
     return _allTransactions.where((t) {
-      final desc = (t['description'] ?? t['title'] ?? '').toString().toLowerCase();
       final type = (t['type']?.toString().toLowerCase() ?? '');
-
-      final matchesSearch = desc.contains(_searchQuery.toLowerCase());
-      bool matchesFilter = true;
-
-      if (_selectedFilter == 'income') {
-        matchesFilter = type == 'income';
-      } else if (_selectedFilter == 'expense') {
-        matchesFilter = type == 'expense';
-      }
-
-      return matchesSearch && matchesFilter;
+      if (_selectedFilter == 'income') return type == 'income';
+      if (_selectedFilter == 'expense') return type == 'expense';
+      return true;
     }).toList();
+  }
+
+  double get _totalIncome => _allTransactions
+      .where((t) => (t['type']?.toString().toLowerCase() ?? '') == 'income')
+      .fold(0.0, (sum, t) => sum + _parseAmount(t['amount']));
+
+  double get _totalExpense => _allTransactions
+      .where((t) => (t['type']?.toString().toLowerCase() ?? '') == 'expense')
+      .fold(0.0, (sum, t) => sum + _parseAmount(t['amount']));
+
+  double _parseAmount(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0;
+    return 0;
   }
 
   String _formatRupiah(double amount) {
@@ -65,48 +64,11 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
     return 'Rp $result';
   }
 
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
-  }
-
-  void _showLaporKoreksiDialog(Map<String, dynamic> trx) {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Lapor Koreksi Transaksi', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(trx['description']?.toString() ?? 'Transaksi', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Jelaskan kesalahan/koreksi yang diperlukan',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D6EFD)),
-            onPressed: () {
-              Navigator.pop(context);
-              _showSnack('Laporan koreksi berhasil dikirim ke Owner.');
-            },
-            child: const Text('Kirim ke Owner', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+  String _formatTime(String? dateStr) {
+    if (dateStr == null) return '';
+    final dt = DateTime.tryParse(dateStr);
+    if (dt == null) return '';
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -116,209 +78,63 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        elevation: 0,
+        backgroundColor: theme.cardColor,
+        elevation: 0.5,
         automaticallyImplyLeading: false,
-        titleSpacing: 16,
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: const Color(0xFF0D6EFD), borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.point_of_sale, color: Colors.white, size: 18),
+              decoration: BoxDecoration(color: _blue, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.list_alt_rounded, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 8),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('CASHMATE POS', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                Text('Aktivitas Transaksi Kasir', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-              ],
-            ),
+            Text('Aktivitas Hari Ini', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
           ],
         ),
-        actions: [
-          IconButton(icon: const Icon(Icons.notifications_none), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.account_circle, color: Color(0xFF0D6EFD)), onPressed: () {}),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: _fetchTransactions,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            // Banner Shift Aktif
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.circle, size: 8, color: Colors.green),
-                          const SizedBox(width: 6),
-                          Text('SHIFT PAGI AKTIF', style: TextStyle(fontSize: 11, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const Text('Total Masuk Kasir', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Aktivitas Transaksi Kasir', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text(_formatRupiah(_totalMasukKasir),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0D6EFD))),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Pencarian
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                    decoration: InputDecoration(
-                      hintText: 'Cari no. struk, nota, atau catatan...',
-                      hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
-                      prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.tune, size: 20),
-                    onPressed: () {},
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Filter Chips
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            // Summary row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
                 children: [
-                  _buildFilterChip('Semua (${_allTransactions.length})', 'semua'),
+                  Expanded(child: _summaryChip('Pemasukan', _formatRupiah(_totalIncome), Colors.green, theme)),
                   const SizedBox(width: 8),
-                  _buildFilterChip('Pemasukan', 'income'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Pengeluaran', 'expense'),
+                  Expanded(child: _summaryChip('Pengeluaran', _formatRupiah(_totalExpense), Colors.red, theme)),
                 ],
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            // List Transaksi
-            if (_isLoading)
-              const Center(child: Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator()))
-            else if (_filteredTransactions.isEmpty)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(30),
-                  child: Text('Belum ada aktivitas transaksi', style: TextStyle(color: Colors.grey)),
-                ),
-              )
-            else
-              ..._filteredTransactions.map((trx) => _buildTransactionCard(trx)),
-
-            const SizedBox(height: 20),
-
-            // Rekap Kilat Shift Saya
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // Filter chips
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('📄 Rekap Kilat Shift Saya', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
-                        child: const Text('Real-time', style: TextStyle(fontSize: 10, color: Color(0xFF0D6EFD), fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(10)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Kas Masuk (Laci)', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                              const SizedBox(height: 2),
-                              Text(_formatRupiah(_totalMasukLaci), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(10)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Kas Masuk (QRIS)', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                              const SizedBox(height: 2),
-                              Text(_formatRupiah(_totalMasukQris), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 44,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D6EFD),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () => _showSnack('File PDF rekap shift berhasil diexport.'),
-                      icon: const Icon(Icons.receipt_long, color: Colors.white, size: 16),
-                      label: const Text('Ekspor Rekap Shift Saya (PDF)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                  ),
+                  _filterChip('Semua', 'semua', theme),
+                  const SizedBox(width: 8),
+                  _filterChip('Pemasukan', 'income', theme),
+                  const SizedBox(width: 8),
+                  _filterChip('Pengeluaran', 'expense', theme),
                 ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // List
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _filteredTransactions.isEmpty
+                  ? _emptyState(theme)
+                  : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                itemCount: _filteredTransactions.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  return _buildTile(_filteredTransactions[index], theme);
+                },
               ),
             ),
           ],
@@ -327,110 +143,130 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
     );
   }
 
-  Widget _buildFilterChip(String label, String value) {
-    final bool isSelected = _selectedFilter == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      selectedColor: const Color(0xFF0D6EFD),
-      labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
-      backgroundColor: Colors.grey.shade100,
-      onSelected: (_) => setState(() => _selectedFilter = value),
-    );
-  }
-
-  Widget _buildTransactionCard(Map<String, dynamic> trx) {
-    final bool isIncome = (trx['type']?.toString().toLowerCase() ?? '') == 'income';
-    final amount = double.tryParse(trx['amount'].toString()) ?? 0;
-    final title = trx['description']?.toString() ?? trx['title']?.toString() ?? 'Transaksi Kasir';
-    final dateStr = trx['created_at']?.toString() ?? '';
-
+  Widget _summaryChip(String label, String value, Color color, ThemeData theme) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isIncome ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isIncome ? Icons.coffee_rounded : Icons.shopping_bag_outlined,
-                  color: isIncome ? Colors.green : Colors.red,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Text(label, style: TextStyle(fontSize: 11, color: theme.hintColor)),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, String value, ThemeData theme) {
+    final selected = _selectedFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? _blue : theme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? _blue : theme.dividerColor.withOpacity(0.2)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : theme.textTheme.bodyLarge?.color,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTile(Map<String, dynamic> trx, ThemeData theme) {
+    final type = (trx['type'] ?? '').toString();
+    final isIncome = type == 'income';
+    final desc = (trx['description'] ?? '').toString();
+    final amount = _parseAmount(trx['amount']);
+
+    // Nested wallet/category dari API response
+    final walletName = trx['wallet'] is Map ? trx['wallet']['name']?.toString() : null;
+    final categoryName = trx['category'] is Map ? trx['category']['name']?.toString() : null;
+
+    final displayTitle = desc.trim().isNotEmpty
+        ? desc.trim()
+        : categoryName != null
+        ? '${isIncome ? 'Pemasukan' : 'Pengeluaran'} • $categoryName'
+        : 'Transaksi';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: isIncome ? Colors.green.shade50 : Colors.red.shade50,
+            child: Icon(
+              isIncome ? Icons.arrow_downward : Icons.arrow_upward,
+              color: isIncome ? Colors.green : Colors.red,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: theme.textTheme.bodyLarge?.color)),
+                const SizedBox(height: 2),
+                Wrap(
+                  spacing: 6,
                   children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(dateStr.length > 10 ? dateStr.substring(0, 10) : dateStr,
-                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                        const Text(' • ', style: TextStyle(color: Colors.grey)),
-                        const Text('Terverifikasi', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
+                    Text(_formatTime(trx['created_at']?.toString()), style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                    if (walletName != null)
+                      Text('• $walletName', style: TextStyle(fontSize: 11, color: theme.hintColor)),
                   ],
                 ),
-              ),
-              Text(
-                '${isIncome ? "+" : "-"}${_formatRupiah(amount)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: isIncome ? Colors.green : Colors.red,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: Divider(height: 1),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  minimumSize: Size.zero,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  side: BorderSide(color: Colors.grey.shade300),
-                ),
-                onPressed: () => _showLaporKoreksiDialog(trx),
-                icon: const Icon(Icons.flag_outlined, size: 14, color: Colors.orange),
-                label: const Text('Lapor Koreksi', style: TextStyle(fontSize: 11, color: Colors.black87)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isIncome ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '${isIncome ? "+" : "-"} ${_formatRupiah(amount)}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12.5,
+                color: isIncome ? Colors.green : Colors.red,
               ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE8F1FF),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  minimumSize: Size.zero,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: () => _showSnack('Memproses cetak struk/nota...'),
-                icon: const Icon(Icons.print_outlined, size: 14, color: Color(0xFF0D6EFD)),
-                label: const Text('Cetak Struk', style: TextStyle(fontSize: 11, color: Color(0xFF0D6EFD), fontWeight: FontWeight.bold)),
-              ),
-            ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.receipt_long_outlined, size: 48, color: theme.hintColor),
+          const SizedBox(height: 12),
+          Text('Belum ada transaksi hari ini', style: TextStyle(color: theme.hintColor, fontSize: 13)),
+          const SizedBox(height: 6),
+          Text('Ketuk tombol + untuk mencatat transaksi.', style: TextStyle(fontSize: 11, color: theme.hintColor)),
         ],
       ),
     );

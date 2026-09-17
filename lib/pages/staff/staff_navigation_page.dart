@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
-import 'kasir_page.dart';
+import 'staff_home_page.dart';
 import 'staff_activity_page.dart';
-import 'staff_history_page.dart';
+import 'staff_data_page.dart';
 import 'staff_profile_page.dart';
-import 'foto_nota_page.dart';
+import '../add_transaction_page.dart';
 
+/// Bottom navigation Staff CashMate.
+/// 4 tab + 1 center action (Catat Transaksi):
+///   0. Beranda — identitas usaha + ringkasan hari ini
+///   1. Aktivitas — transaksi Staff hari ini
+///   2. (center) — buka form Catat Transaksi
+///   3. Data Aktif — wallet aktif + kategori aktif (read-only)
+///   4. Akun — user info, tema, logout
 class StaffNavigationPage extends StatefulWidget {
   final int userId;
   const StaffNavigationPage({super.key, this.userId = 1});
@@ -20,10 +27,10 @@ class _StaffNavigationPageState extends State<StaffNavigationPage> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      const KasirPage(),
+      const StaffHomePage(),
       const StaffActivityPage(),
-      const KasirPage(), // Placeholder untuk tab tengah (karena dipicu lewat route kamera)
-      const StaffHistoryPage(),
+      const SizedBox.shrink(), // Placeholder untuk center action
+      const StaffDataPage(),
       StaffProfilePage(userId: widget.userId),
     ];
 
@@ -39,10 +46,10 @@ class _StaffNavigationPageState extends State<StaffNavigationPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _navItem(Icons.point_of_sale, 'Kasir', 0),
+            _navItem(Icons.home_outlined, 'Beranda', 0),
             _navItem(Icons.list_alt_rounded, 'Aktivitas', 1),
             _centerFabItem(),
-            _navItem(Icons.history_rounded, 'Histori', 3),
+            _navItem(Icons.folder_open_outlined, 'Data', 3),
             _navItem(Icons.person_outline_rounded, 'Akun', 4),
           ],
         ),
@@ -82,11 +89,15 @@ class _StaffNavigationPageState extends State<StaffNavigationPage> {
     return Expanded(
       child: Center(
         child: GestureDetector(
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            final result = await Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const FotoNotaPage()),
+              MaterialPageRoute(builder: (_) => const AddTransactionPage()),
             );
+            if (result == true && mounted) {
+              // Trigger refresh pada page aktif
+              setState(() {});
+            }
           },
           child: Container(
             height: 42,
@@ -98,7 +109,7 @@ class _StaffNavigationPageState extends State<StaffNavigationPage> {
                 BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
               ],
             ),
-            child: const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 20),
+            child: const Icon(Icons.add, color: Colors.white, size: 22),
           ),
         ),
       ),

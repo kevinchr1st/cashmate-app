@@ -44,6 +44,7 @@ class ApiService {
       }
     }
 
+    // API /auth/login dan /auth/me mengembalikan data.user dan data.business
     final user = data['user'];
     if (user is Map) {
       if (user['id'] != null) await prefs.setInt('user_id', user['id']);
@@ -52,6 +53,9 @@ class ApiService {
       }
       if (user['name'] != null) {
         await prefs.setString('saved_owner_name', user['name'].toString());
+      }
+      if (user['email'] != null) {
+        await prefs.setString('saved_email', user['email'].toString());
       }
       if (user['profile_photo'] != null && user['profile_photo'].toString().isNotEmpty) {
         await prefs.setString('saved_profile_photo_path', user['profile_photo'].toString());
@@ -78,6 +82,7 @@ class ApiService {
     await prefs.remove('business_id');
     await prefs.remove('saved_owner_name');
     await prefs.remove('saved_store_name');
+    await prefs.remove('saved_email');
     await prefs.remove('saved_profile_photo_path');
   }
 
@@ -158,6 +163,7 @@ class ApiService {
   }
 
   // ---------- 🙋 Current User (GET /auth/me) ----------
+  // Response: { data: { user: {...}, business: {...} } }
   static Future<Map<String, dynamic>?> getCurrentUser() async {
     try {
       final response = await http
@@ -177,9 +183,6 @@ class ApiService {
   }
 
   // ---------- 🖼️ Upload Foto Profil (PUT /auth/me/photo) ----------
-  // Sesuai Postman: multipart/form-data, field name = "photo".
-  // Server menyimpan file lalu mengembalikan path relatif, contoh:
-  // "/uploads/avatars/1/ab12cd34.jpg"
   static Future<Map<String, dynamic>> uploadProfilePhoto(File photoFile) async {
     try {
       final token = await _getAccessToken();
@@ -200,7 +203,6 @@ class ApiService {
         final data = body['data'];
         final photoPath = data != null ? data['profile_photo']?.toString() : null;
 
-        // Simpan path foto ke lokal supaya tetap tampil setelah app dibuka ulang
         if (photoPath != null && photoPath.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('saved_profile_photo_path', photoPath);
@@ -224,10 +226,7 @@ class ApiService {
     }
   }
 
-  /// Ubah path relatif dari server (mis. "/uploads/avatars/1/ab12cd34.jpg")
-  /// menjadi URL absolut yang bisa dipakai NetworkImage.
-  /// baseUrl biasanya berbentuk "http://VPS_IP:PORT/api", jadi "/api" perlu
-  /// dibuang supaya path statis /uploads/... mengarah ke root server.
+  /// Ubah path relatif dari server menjadi URL absolut.
   static String? resolvePhotoUrl(String? path) {
     if (path == null || path.isEmpty) return null;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -287,7 +286,10 @@ class ApiService {
     }
   }
 
-  // ---------- 📝 Create Staff (POST /staff - oleh Owner) ----------
+  // ---------- 👥 Staff Management ----------
+
+  /// Membuat Staff baru (POST /staff) — hanya Owner
+  /// Sesuai kontrak Postman: { name, email, password }
   static Future<Map<String, dynamic>> createStaff({
     required String name,
     required String email,
@@ -317,7 +319,70 @@ class ApiService {
     }
   }
 
-  // ---------- 💰 Wallets (GET /wallets) ----------
+  /// Mengambil daftar Staff (GET /staff?status=active|disabled|all) — hanya Owner
+  static Future<List<Map<String, dynamic>>> fetchStaff({String status = 'active'}) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/staff?status=$status'),
+        headers: await _authHeaders(),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final list = data['data'] ?? data;
+        if (list is List) {
+          return List<Map<String, dynamic>>.from(list);
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetchStaff: $e');
+      return [];
+    }
+  }
+
+  /// Nonaktifkan Staff (DELETE /staff/{id}) — soft delete
+  static Future<Map<String, dynamic>> disableStaff(int staffId) async {
+    try {
+      final response = await http
+          .delete(
+        Uri.parse('${AppConstants.baseUrl}/staff/$staffId'),
+        headers: await _authHeaders(),
+      )
+          .timeout(const Duration(seconds: 8));
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': body['message'] ?? 'Staff berhasil dinonaktifkan'};
+      }
+      return {'success': false, 'message': body['message'] ?? 'Gagal menonaktifkan staff'};
+    } catch (e) {
+      debugPrint('Error disableStaff: $e');
+      return {'success': false, 'message': 'Kesalahan koneksi'};
+    }
+  }
+
+  /// Pulihkan Staff (POST /staff/{id}/restore) — mengembalikan akses login
+  static Future<Map<String, dynamic>> restoreStaff(int staffId) async {
+    try {
+      final response = await http
+          .post(
+        Uri.parse('${AppConstants.baseUrl}/staff/$staffId/restore'),
+        headers: await _authHeaders(),
+      )
+          .timeout(const Duration(seconds: 8));
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': body['message'] ?? 'Staff berhasil diaktifkan', 'data': body['data']};
+      }
+      return {'success': false, 'message': body['message'] ?? 'Gagal memulihkan staff'};
+    } catch (e) {
+      debugPrint('Error restoreStaff: $e');
+      return {'success': false, 'message': 'Kesalahan koneksi'};
+    }
+  }
+
+  // ---------- 💰 Wallets ----------
+
   static Future<List<Map<String, dynamic>>> fetchWallets({String status = 'active'}) async {
     try {
       final response = await http
@@ -338,7 +403,6 @@ class ApiService {
     return [];
   }
 
-  // Membuat Wallet baru (POST /wallets)
   static Future<Map<String, dynamic>> createWallet({required String name}) async {
     try {
       final response = await http
@@ -360,7 +424,35 @@ class ApiService {
     }
   }
 
-  // Nonaktifkan Wallet (DELETE /wallets/{id})
+  static Future<Map<String, dynamic>> updateWallet({
+    required int walletId,
+    required String name,
+    String currency = 'IDR',
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${AppConstants.baseUrl}/wallets/$walletId'),
+        headers: await _authHeaders(),
+        body: jsonEncode({
+          'name': name,
+          'currency': currency,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': data['data'] ?? data};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal memperbarui kantong.'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan: $e'};
+    }
+  }
+
   static Future<bool> disableWallet(int id) async {
     try {
       final response = await http
@@ -376,7 +468,6 @@ class ApiService {
     }
   }
 
-  // Pulihkan Wallet (POST /wallets/{id}/restore)
   static Future<bool> restoreWallet(int id) async {
     try {
       final response = await http
@@ -392,7 +483,8 @@ class ApiService {
     }
   }
 
-  // ---------- 🏷️ Categories (GET /categories) ----------
+  // ---------- 🏷️ Categories ----------
+
   static Future<List<Map<String, dynamic>>> fetchCategories({String status = 'active'}) async {
     try {
       final response = await http
@@ -413,7 +505,6 @@ class ApiService {
     return [];
   }
 
-  // Membuat Kategori (POST /categories)
   static Future<Map<String, dynamic>> createCategory({required String name, required String type}) async {
     try {
       final response = await http
@@ -435,7 +526,6 @@ class ApiService {
     }
   }
 
-  // Nonaktifkan Kategori (DELETE /categories/{id})
   static Future<bool> disableCategory(int id) async {
     try {
       final response = await http
@@ -451,7 +541,6 @@ class ApiService {
     }
   }
 
-  // Pulihkan Kategori (POST /categories/{id}/restore)
   static Future<bool> restoreCategory(int id) async {
     try {
       final response = await http
@@ -468,19 +557,38 @@ class ApiService {
   }
 
   // ---------- 📄 Transactions ----------
+
+  /// Fetch transaksi dengan filter lengkap sesuai kontrak Postman.
+  /// Owner: bisa kirim status=active|disabled|all, type, wallet_id, category_id, creator_id, from_date, to_date
+  /// Staff: API mengabaikan date filter dan hanya menampilkan transaksi sendiri hari ini.
   static Future<Map<String, dynamic>> fetchTransactions({
+    String? status,
     String? type,
+    int? walletId,
+    int? categoryId,
+    int? creatorId,
+    String? fromDate,
+    String? toDate,
     int page = 1,
     int perPage = 50,
   }) async {
     try {
-      String url = '${AppConstants.baseUrl}/transactions?page=$page&per_page=$perPage';
-      if (type != null && type.isNotEmpty) {
-        url += '&type=$type';
-      }
+      final params = <String, String>{
+        'page': page.toString(),
+        'per_page': perPage.toString(),
+      };
+      if (status != null && status.isNotEmpty) params['status'] = status;
+      if (type != null && type.isNotEmpty) params['type'] = type;
+      if (walletId != null) params['wallet_id'] = walletId.toString();
+      if (categoryId != null) params['category_id'] = categoryId.toString();
+      if (creatorId != null) params['creator_id'] = creatorId.toString();
+      if (fromDate != null && fromDate.isNotEmpty) params['from_date'] = fromDate;
+      if (toDate != null && toDate.isNotEmpty) params['to_date'] = toDate;
+
+      final uri = Uri.parse('${AppConstants.baseUrl}/transactions').replace(queryParameters: params);
 
       final response = await http
-          .get(Uri.parse(url), headers: await _authHeaders())
+          .get(uri, headers: await _authHeaders())
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
@@ -494,9 +602,43 @@ class ApiService {
     }
   }
 
-  // Buat Transaksi (POST /transactions)
-  // photoFile opsional: kalau diisi, dikirim sebagai multipart/form-data (field "photos"),
-  // persis sesuai contoh "Create Owner Expense with Photo" di Postman collection.
+  /// Helper: Ambil semua halaman transaksi berdasarkan metadata paginasi API.
+  /// Berguna ketika filter "Semua" perlu menampilkan data lengkap > 1 halaman.
+  static Future<List<Map<String, dynamic>>> fetchAllTransactions({
+    String? status,
+    String? type,
+    int perPage = 100,
+  }) async {
+    final allData = <Map<String, dynamic>>[];
+    int currentPage = 1;
+    int lastPage = 1;
+
+    do {
+      final result = await fetchTransactions(
+        status: status,
+        type: type,
+        page: currentPage,
+        perPage: perPage,
+      );
+      if (result['success'] != true) break;
+
+      final List<dynamic> pageData = result['data'] ?? [];
+      allData.addAll(pageData.map((e) => Map<String, dynamic>.from(e)));
+
+      final meta = result['meta'];
+      if (meta is Map) {
+        lastPage = meta['last_page'] ?? 1;
+      } else {
+        break;
+      }
+      currentPage++;
+    } while (currentPage <= lastPage);
+
+    return allData;
+  }
+
+  /// Buat Transaksi (POST /transactions)
+  /// photoFile opsional: kalau diisi, dikirim sebagai multipart/form-data (field "photos")
   static Future<Map<String, dynamic>> createTransaction({
     required int walletId,
     required int categoryId,
@@ -507,19 +649,18 @@ class ApiService {
     File? photoFile,
   }) async {
     try {
-      final int roundedAmount = amount.round(); // Kirim sebagai integer murni (tanpa .0), sesuai kontrak Postman
+      final int roundedAmount = amount.round();
       final headers = await _authHeaders();
       http.Response response;
 
       if (photoFile != null) {
-        // Ada foto -> wajib multipart/form-data (JSON tidak bisa membawa file biner)
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('${AppConstants.baseUrl}/transactions'),
         );
         request.headers
           ..addAll(headers)
-          ..remove('Content-Type'); // biarkan http yang set boundary multipart-nya sendiri
+          ..remove('Content-Type');
 
         request.fields['wallet_id'] = walletId.toString();
         request.fields['category_id'] = categoryId.toString();
@@ -533,8 +674,6 @@ class ApiService {
         }
         request.files.add(await http.MultipartFile.fromPath('photos', photoFile.path));
 
-        debugPrint('Payload Create Transaction (multipart): ${request.fields}, foto: ${photoFile.path}');
-
         final streamed = await request.send().timeout(const Duration(seconds: 15));
         response = await http.Response.fromStream(streamed);
       } else {
@@ -542,12 +681,10 @@ class ApiService {
           'wallet_id': walletId,
           'category_id': categoryId,
           'amount': roundedAmount,
-          'type': type,     // 'income' atau 'expense'
+          'type': type,
           if (description != null && description.trim().isNotEmpty) 'description': description.trim(),
           if (date != null && date.isNotEmpty) 'date': date,
         };
-
-        debugPrint('Payload Create Transaction: ${jsonEncode(payload)}'); // Untuk debugging di logcat
 
         response = await http
             .post(
@@ -557,8 +694,6 @@ class ApiService {
         )
             .timeout(const Duration(seconds: 8));
       }
-
-      debugPrint('Create Transaction Response (${response.statusCode}): ${response.body}'); // sementara untuk debugging foto
 
       final body = jsonDecode(response.body);
       if (response.statusCode == 201 || response.statusCode == 200) {
@@ -571,7 +706,7 @@ class ApiService {
     }
   }
 
-  // Update Transaksi (PUT /transactions/{id})
+  /// Update Transaksi (PUT /transactions/{id}) — hanya Owner
   static Future<Map<String, dynamic>> updateTransaction({
     required int transactionId,
     required int walletId,
@@ -585,13 +720,11 @@ class ApiService {
       final Map<String, dynamic> payload = {
         'wallet_id': walletId,
         'category_id': categoryId,
-        'amount': amount.round(), // Kirim sebagai integer murni (tanpa .0), sesuai kontrak Postman
+        'amount': amount.round(),
         'type': type,
         if (description != null) 'description': description.trim(),
         if (date != null && date.isNotEmpty) 'date': date,
       };
-
-      debugPrint('Payload Update Transaction: ${jsonEncode(payload)}'); // Untuk debugging di logcat
 
       final response = await http
           .put(
@@ -612,7 +745,7 @@ class ApiService {
     }
   }
 
-  // Void Transaksi (DELETE /transactions/{id})
+  /// Void Transaksi (DELETE /transactions/{id}) — hanya Owner
   static Future<Map<String, dynamic>> voidTransaction(int id) async {
     try {
       final response = await http
@@ -632,7 +765,27 @@ class ApiService {
     }
   }
 
-  // Hapus Foto Transaksi (DELETE /transactions/{id}/photos/{photoId})
+  /// Restore Transaksi (POST /transactions/{id}/restore) — hanya Owner
+  static Future<Map<String, dynamic>> restoreTransaction(int id) async {
+    try {
+      final response = await http
+          .post(
+        Uri.parse('${AppConstants.baseUrl}/transactions/$id/restore'),
+        headers: await _authHeaders(),
+      )
+          .timeout(const Duration(seconds: 8));
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': body['message'] ?? 'Transaksi dipulihkan', 'data': body['data']};
+      }
+      return {'success': false, 'message': body['message'] ?? 'Gagal memulihkan'};
+    } catch (e) {
+      debugPrint('Error restoreTransaction: $e');
+      return {'success': false, 'message': 'Kesalahan koneksi'};
+    }
+  }
+
+  /// Hapus Foto Transaksi (DELETE /transactions/{id}/photos/{photoId})
   static Future<Map<String, dynamic>> deleteTransactionPhoto({
     required int transactionId,
     required int photoId,
@@ -655,27 +808,8 @@ class ApiService {
     }
   }
 
-  // Restore Transaksi (POST /transactions/{id}/restore)
-  static Future<Map<String, dynamic>> restoreTransaction(int id) async {
-    try {
-      final response = await http
-          .post(
-        Uri.parse('${AppConstants.baseUrl}/transactions/$id/restore'),
-        headers: await _authHeaders(),
-      )
-          .timeout(const Duration(seconds: 8));
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        return {'success': true, 'message': body['message'] ?? 'Transaksi dipulihkan'};
-      }
-      return {'success': false, 'message': body['message'] ?? 'Gagal memulihkan'};
-    } catch (e) {
-      debugPrint('Error restoreTransaction: $e');
-      return {'success': false, 'message': 'Kesalahan koneksi'};
-    }
-  }
-
   // ---------- 📊 Dashboard & Reports ----------
+
   static Future<Map<String, dynamic>?> getDashboardSummary() async {
     try {
       final response = await http
@@ -695,6 +829,8 @@ class ApiService {
     return null;
   }
 
+  /// GET /reports/monthly?year=YYYY — mengembalikan 12 bulan
+  /// Setiap entri: { month, income, expense, net_cashflow }
   static Future<List<Map<String, dynamic>>> getMonthlyReport({required int year}) async {
     try {
       final response = await http
@@ -715,58 +851,7 @@ class ApiService {
     return [];
   }
 
-  // ---------- 👥 Staff Approval ----------
-
-
-  static Future<bool> approveStaff(int staffId) async {
-    try {
-      final response = await http
-          .post(
-        Uri.parse('${AppConstants.baseUrl}/staff/$staffId/approve'),
-        headers: await _authHeaders(),
-      )
-          .timeout(const Duration(seconds: 8));
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Error approveStaff: $e');
-      return false;
-    }
-  }
-
-  // ---------- 👤 Profile ----------
-  static Future<Map<String, dynamic>?> fetchProfile() async {
-    try {
-      final response = await http
-          .get(
-        Uri.parse('${AppConstants.baseUrl}/profile'),
-        headers: await _authHeaders(),
-      )
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['data'];
-      }
-    } catch (e) {
-      debugPrint('Error fetch profile: $e');
-    }
-    return null;
-  }
-
-  static Future<bool> updateProfile(Map<String, dynamic> body) async {
-    try {
-      final response = await http
-          .put(
-        Uri.parse('${AppConstants.baseUrl}/profile'),
-        headers: await _authHeaders(),
-        body: jsonEncode(body),
-      )
-          .timeout(const Duration(seconds: 5));
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Error update profile: $e');
-      return false;
-    }
-  }
+  // ---------- 🔐 Session Helpers ----------
 
   static Future<bool> ensureValidSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -775,103 +860,5 @@ class ApiService {
 
     final me = await getCurrentUser();
     return me != null;
-  }
-
-  static Future<List<Map<String, dynamic>>> fetchPendingStaff() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
-
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/staff'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final list = data['data'] ?? data;
-        if (list is List) {
-          return List<Map<String, dynamic>>.from(list);
-        }
-      }
-      return [];
-    } catch (e) {
-      debugPrint('Error fetching staff: $e');
-      return [];
-    }
-  }
-  /// Memperbarui nama atau detail kantong/wallet (PUT /wallets/{id})
-  static Future<Map<String, dynamic>> updateWallet({
-    required int walletId,
-    required String name,
-    String currency = 'IDR',
-  }) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
-
-      final response = await http.put(
-        Uri.parse('${AppConstants.baseUrl}/wallets/$walletId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'name': name,
-          'currency': currency,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return {'success': true, 'data': data['data'] ?? data};
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Gagal memperbarui kantong.'
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Terjadi kesalahan: $e'};
-    }
-  }
-
-  static Future<bool> rejectStaff(int staffId) async {
-    try {
-      final response = await http
-          .post(
-        Uri.parse('${AppConstants.baseUrl}/staff/$staffId/reject'),
-        headers: await _authHeaders(),
-      )
-          .timeout(const Duration(seconds: 8));
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Error rejectStaff: $e');
-      return false;
-    }
-  }
-
-  // ---------- 🔔 Activities ----------
-  static Future<List<dynamic>> fetchRecentActivities() async {
-    try {
-      final response = await http
-          .get(
-        Uri.parse('${AppConstants.baseUrl}/activities/recent'),
-        headers: await _authHeaders(),
-      )
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['data'] ?? [];
-      }
-    } catch (e) {
-      debugPrint('Error fetch activities: $e');
-    }
-    return [];
   }
 }

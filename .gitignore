@@ -12,6 +12,12 @@
 .swiftpm/
 migrate_working_dir/
 
+AGENTS.md
+CashMate_BRD_v3.md
+CashMate_PRD_v1.md
+
+
+
 # IntelliJ related
 *.iml
 *.ipr

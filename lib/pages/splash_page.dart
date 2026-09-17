@@ -215,7 +215,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(26),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
@@ -232,10 +232,18 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.account_balance_wallet,
-                          size: 64,
-                          color: Color(0xFF0D6EFD),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/cashmate-logo.png',
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.account_balance_wallet,
+                              size: 64,
+                              color: Color(0xFF0D6EFD),
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 28),

@@ -142,13 +142,19 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: const Color(0xFFE8F1FF),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(Icons.account_balance_wallet,
-                              size: 40, color: Color(0xFF0D6EFD)),
+                          child: Image.asset(
+                            'assets/cashmate-logo.png',
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.account_balance_wallet,
+                                size: 40, color: Color(0xFF0D6EFD)),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         const Text(

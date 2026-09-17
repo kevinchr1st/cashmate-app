@@ -21,10 +21,17 @@ class _TransactionPageState extends State<TransactionPage> {
 
   final searchController = TextEditingController();
 
-  String filterType = 'Semua';
+  // Status filter: active (default), all, disabled (void)
+  String _statusFilter = 'active';
+  // Type filter: null (semua), income, expense
+  String? _typeFilter;
+
   bool isLoading = false;
   List<Transaction> transactions = [];
   List<Map<String, dynamic>> rawTransactions = [];
+
+  // Transaksi aktif terpisah untuk menghitung total (tidak pernah menjumlah void)
+  List<Transaction> _activeTransactions = [];
 
   List<Wallet> wallets = [];
   List<Category> categories = [];
@@ -39,13 +46,10 @@ class _TransactionPageState extends State<TransactionPage> {
     'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
   ];
 
-  static const _filterOptions = ['Semua', 'Uang Masuk', 'Uang Keluar', 'Bulan Ini'];
-
   @override
   void initState() {
     super.initState();
-    fetchTransactions();
-    fetchMasterData();
+    _fetchData();
     _loadUserRole();
     searchController.addListener(() => setState(() {}));
   }
@@ -59,6 +63,10 @@ class _TransactionPageState extends State<TransactionPage> {
   Future<void> _loadUserRole() async {
     final owner = await ApiService.isOwner();
     if (mounted) setState(() => isOwner = owner);
+  }
+
+  Future<void> _fetchData() async {
+    await Future.wait([fetchTransactions(), fetchMasterData(), _fetchActiveTransactions()]);
   }
 
   Future<void> fetchMasterData() async {
@@ -86,11 +94,11 @@ class _TransactionPageState extends State<TransactionPage> {
   Future<void> fetchTransactions() async {
     setState(() => isLoading = true);
     try {
-      String? apiType;
-      if (filterType == 'Uang Masuk') apiType = 'income';
-      if (filterType == 'Uang Keluar') apiType = 'expense';
-
-      final result = await ApiService.fetchTransactions(type: apiType, perPage: 100);
+      final result = await ApiService.fetchTransactions(
+        status: _statusFilter,
+        type: _typeFilter,
+        perPage: 100,
+      );
       final List<Map<String, dynamic>> data = List<Map<String, dynamic>>.from(result['data'] ?? []);
 
       setState(() {
@@ -104,70 +112,102 @@ class _TransactionPageState extends State<TransactionPage> {
     }
   }
 
-  Future<void> _onFilterChanged(String value) async {
-    if (filterType == value) return;
-    setState(() => filterType = value);
+  /// Fetch transaksi aktif terpisah untuk menghitung total, agar void
+  /// tidak pernah masuk hitungan meskipun filter sedang menampilkan Semua/Void.
+  Future<void> _fetchActiveTransactions() async {
+    try {
+      final result = await ApiService.fetchTransactions(status: 'active', perPage: 100);
+      final List<Map<String, dynamic>> data = List<Map<String, dynamic>>.from(result['data'] ?? []);
+      if (mounted) {
+        setState(() {
+          _activeTransactions = data.map((json) => Transaction.fromJson(json)).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error _fetchActiveTransactions: $e');
+    }
+  }
+
+  Future<void> _onStatusFilterChanged(String value) async {
+    if (_statusFilter == value) return;
+    setState(() => _statusFilter = value);
     await fetchTransactions();
   }
 
-  Future<void> _voidTransaction(Map<String, dynamic> raw) async {
-    final id = int.tryParse(raw['id'].toString());
-    if (id == null) return;
+  Future<void> _onTypeFilterChanged(String? value) async {
+    if (_typeFilter == value) return;
+    setState(() => _typeFilter = value);
+    await fetchTransactions();
+  }
 
+  Future<void> _voidTransaction(Transaction trx) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Batalkan Transaksi'),
-        content: Text('Batalkan transaksi "${(raw['description']?.toString().trim().isNotEmpty ?? false) ? raw['description'] : 'ini'}"?'),
+        title: const Text('Void Transaksi'),
+        content: Text('Void transaksi "${trx.displayTitle}"? Efek saldo akan dibalik.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Tidak')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Batalkan', style: TextStyle(color: Colors.red)),
+            child: const Text('Void', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
 
-    final result = await ApiService.voidTransaction(id);
+    final result = await ApiService.voidTransaction(trx.id);
     if (!mounted) return;
 
     if (result['success'] == true) {
-      await fetchTransactions();
-      await fetchMasterData();
+      await _refreshAll();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message'] ?? 'Transaksi dibatalkan'),
+          content: Text(result['message'] ?? 'Transaksi di-void'),
           action: SnackBarAction(
             label: 'PULIHKAN',
-            onPressed: () async {
-              final restoreResult = await ApiService.restoreTransaction(id);
-              if (restoreResult['success'] == true) {
-                await fetchTransactions();
-                await fetchMasterData();
-              }
-            },
+            onPressed: () => _restoreTransaction(trx.id),
           ),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message'] ?? 'Gagal membatalkan transaksi')),
+        SnackBar(content: Text(result['message'] ?? 'Gagal void transaksi')),
       );
     }
   }
 
-  Future<void> _startEditTransaction(Map<String, dynamic> raw) async {
+  Future<void> _restoreTransaction(int transactionId) async {
+    final result = await ApiService.restoreTransaction(transactionId);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result['success'] == true
+          ? (result['message'] ?? 'Transaksi dipulihkan')
+          : (result['message'] ?? 'Gagal memulihkan transaksi'))),
+    );
+    if (result['success'] == true) await _refreshAll();
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([fetchTransactions(), fetchMasterData(), _fetchActiveTransactions()]);
+  }
+
+  Future<void> _startEditTransaction(Transaction trx) async {
+    // Reconstruct raw map for AddTransactionPage
+    final rawIndex = transactions.indexOf(trx);
+    final Map<String, dynamic>? raw = (rawIndex >= 0 && rawIndex < rawTransactions.length)
+        ? rawTransactions[rawIndex]
+        : null;
+    if (raw == null) return;
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => AddTransactionPage(initialTransaction: raw)),
     );
-    if (result == true) {
-      await fetchTransactions();
-      await fetchMasterData();
-    }
+    if (result == true) await _refreshAll();
   }
 
   Future<void> _openAddTransactionPage() async {
@@ -196,102 +236,30 @@ class _TransactionPageState extends State<TransactionPage> {
       context,
       MaterialPageRoute(builder: (_) => const AddTransactionPage()),
     );
-    if (result == true) {
-      await fetchTransactions();
-      await fetchMasterData();
-    }
+    if (result == true) await _refreshAll();
   }
 
-  void _showRecentActivitiesBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return FutureBuilder<List<dynamic>>(
-          future: ApiService.fetchRecentActivities(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(height: 250, child: Center(child: CircularProgressIndicator()));
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const SizedBox(height: 200, child: Center(child: Text('Belum ada aktivitas terbaru')));
-            }
-
-            final activities = snapshot.data!;
-            return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Aktivitas Terakhir', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: activities.length,
-                      itemBuilder: (context, index) {
-                        final item = activities[index];
-                        final bool isIncome = item['type'] == 'Cash In' || item['type'] == 'income';
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
-                            child: Icon(isIncome ? Icons.arrow_downward : Icons.arrow_upward, color: isIncome ? Colors.green : Colors.red),
-                          ),
-                          title: Text(item['title'] ?? item['description'] ?? 'Transaksi'),
-                          subtitle: Text(item['created_at'] ?? ''),
-                          trailing: Text(
-                            '${isIncome ? "+" : "-"} Rp ${item["amount"]}',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: isIncome ? Colors.green : Colors.red),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  double get totalCashIn => filteredTransactions
-      .where((x) => x.type == 'Cash In' || x.type == 'income')
+  // ---- Totals hanya dari transaksi AKTIF ----
+  double get totalCashIn => _activeTransactions
+      .where((x) => x.type == 'income')
       .fold(0, (sum, x) => sum + x.amount);
 
-  double get totalCashOut => filteredTransactions
-      .where((x) => x.type == 'Cash Out' || x.type == 'expense')
+  double get totalCashOut => _activeTransactions
+      .where((x) => x.type == 'expense')
       .fold(0, (sum, x) => sum + x.amount);
 
   double get netBalance => totalCashIn - totalCashOut;
 
   List<Transaction> get filteredTransactions {
-    final now = DateTime.now();
     final query = searchController.text.toLowerCase().trim();
-    final result = <Transaction>[];
+    if (query.isEmpty) return transactions;
 
-    for (int i = 0; i < transactions.length; i++) {
-      final x = transactions[i];
-      final raw = i < rawTransactions.length ? rawTransactions[i] : null;
-
-      bool matchesType = true;
-      if (filterType == 'Uang Masuk') matchesType = (x.type == 'Cash In' || x.type == 'income');
-      if (filterType == 'Uang Keluar') matchesType = (x.type == 'Cash Out' || x.type == 'expense');
-      if (filterType == 'Bulan Ini') {
-        matchesType = (x.date.month == now.month && x.date.year == now.year);
-      }
-
-      final matchesSearch = query.isEmpty ||
-          _displayTitle(x, raw).toLowerCase().contains(query) ||
-          (_walletName(raw)?.toLowerCase().contains(query) ?? false);
-
-      if (matchesType && matchesSearch) result.add(x);
-    }
-    return result;
+    return transactions.where((trx) {
+      return trx.displayTitle.toLowerCase().contains(query) ||
+          (trx.wallet?.name.toLowerCase().contains(query) ?? false) ||
+          (trx.category?.name.toLowerCase().contains(query) ?? false) ||
+          (trx.createdBy?.name.toLowerCase().contains(query) ?? false);
+    }).toList();
   }
 
   String _formatRupiah(double amount) {
@@ -302,38 +270,6 @@ class _TransactionPageState extends State<TransactionPage> {
   }
 
   String _formatDate(DateTime d) => '${d.day.toString().padLeft(2, '0')} ${_monthNames[d.month]} ${d.year}';
-
-  String? _walletName(Map<String, dynamic>? raw) {
-    if (raw == null) return null;
-    final walletId = raw['wallet_id']?.toString();
-    if (walletId == null) return null;
-    final match = rawWallets.firstWhere((w) => w['id'].toString() == walletId, orElse: () => <String, dynamic>{});
-    return match.isEmpty ? null : (match['name']?.toString());
-  }
-
-  Map<String, dynamic>? _categoryOf(Map<String, dynamic>? raw) {
-    if (raw == null) return null;
-    final categoryId = raw['category_id']?.toString();
-    if (categoryId == null) return null;
-    final match = rawCategories.firstWhere((c) => c['id'].toString() == categoryId, orElse: () => <String, dynamic>{});
-    return match.isEmpty ? null : match;
-  }
-
-  String _displayTitle(Transaction item, Map<String, dynamic>? raw) {
-    final desc = raw?['description']?.toString().trim();
-    if (desc != null && desc.isNotEmpty) return desc;
-
-    final titleFromModel = item.title.trim();
-    if (titleFromModel.isNotEmpty) return titleFromModel;
-
-    final categoryName = _categoryOf(raw)?['name']?.toString();
-    if (categoryName != null && categoryName.isNotEmpty) {
-      final bool isIncome = item.type == 'Cash In' || item.type == 'income';
-      return '${isIncome ? 'Pemasukan' : 'Pengeluaran'} • $categoryName';
-    }
-
-    return 'Transaksi Tanpa Keterangan';
-  }
 
   static const List<Color> _categoryPalette = [
     Color(0xFF0052CC), Color(0xFF00875A), Color(0xFFDE350B), Color(0xFF6554C0),
@@ -381,22 +317,7 @@ class _TransactionPageState extends State<TransactionPage> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: theme.iconTheme.color),
-            onPressed: _showRecentActivitiesBottomSheet,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              radius: 14,
-              backgroundColor: Colors.blue.shade100,
-              child: const Icon(Icons.person, size: 16, color: Colors.blue),
-            ),
-          )
-        ],
       ),
-      // Mengembalikan FAB dengan posisi dinaikkan (margin bottom) agar tidak tertutup bottom navigation bar
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 70.0),
         child: FloatingActionButton.extended(
@@ -408,18 +329,19 @@ class _TransactionPageState extends State<TransactionPage> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await fetchTransactions();
-          await fetchMasterData();
-        },
+        onRefresh: _refreshAll,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 130), // Padding bawah diperbesar agar list terakhir tidak tertutup FAB/nav
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 130),
           children: [
             _buildBalanceHeroCard(),
             const SizedBox(height: 14),
             _buildSearchField(theme),
             const SizedBox(height: 10),
-            _buildFilterChips(theme),
+            // ---- Status filter ----
+            _buildStatusFilterChips(theme),
+            const SizedBox(height: 8),
+            // ---- Type filter ----
+            _buildTypeFilterChips(theme),
             const SizedBox(height: 14),
             _buildListHeader(theme),
             const SizedBox(height: 8),
@@ -433,13 +355,7 @@ class _TransactionPageState extends State<TransactionPage> {
             else if (filteredTransactions.isEmpty)
               _buildEmptyState(theme)
             else
-              ...filteredTransactions.map((item) {
-                final int originalIndex = transactions.indexOf(item);
-                final Map<String, dynamic>? raw = (originalIndex >= 0 && originalIndex < rawTransactions.length)
-                    ? rawTransactions[originalIndex]
-                    : null;
-                return _buildTransactionTile(item, raw, theme);
-              }),
+              ...filteredTransactions.map((trx) => _buildTransactionTile(trx, theme)),
           ],
         ),
       ),
@@ -468,7 +384,7 @@ class _TransactionPageState extends State<TransactionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Saldo Kas (sesuai filter)',
+          const Text('Saldo Kas (transaksi aktif)',
               style: TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
@@ -482,7 +398,7 @@ class _TransactionPageState extends State<TransactionPage> {
                 child: _heroStat(
                   icon: Icons.arrow_downward,
                   iconColor: Colors.greenAccent.shade100,
-                  label: 'Uang Masuk',
+                  label: 'Pemasukan',
                   value: _formatRupiah(totalCashIn),
                 ),
               ),
@@ -492,7 +408,7 @@ class _TransactionPageState extends State<TransactionPage> {
                 child: _heroStat(
                   icon: Icons.arrow_upward,
                   iconColor: Colors.redAccent.shade100,
-                  label: 'Uang Keluar',
+                  label: 'Pengeluaran',
                   value: _formatRupiah(totalCashOut),
                 ),
               ),
@@ -540,7 +456,7 @@ class _TransactionPageState extends State<TransactionPage> {
         controller: searchController,
         style: TextStyle(fontSize: 13.5, color: theme.textTheme.bodyLarge?.color),
         decoration: InputDecoration(
-          hintText: 'Cari transaksi (contoh: penjualan, gaji)...',
+          hintText: 'Cari transaksi...',
           hintStyle: TextStyle(fontSize: 12.5, color: theme.hintColor),
           prefixIcon: const Icon(Icons.search, size: 20, color: _primaryBlue),
           suffixIcon: searchController.text.isEmpty
@@ -559,18 +475,23 @@ class _TransactionPageState extends State<TransactionPage> {
     );
   }
 
-  Widget _buildFilterChips(ThemeData theme) {
+  Widget _buildStatusFilterChips(ThemeData theme) {
+    const options = [
+      {'label': 'Aktif', 'value': 'active'},
+      {'label': 'Semua', 'value': 'all'},
+      {'label': 'Void', 'value': 'disabled'},
+    ];
     return SizedBox(
       height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _filterOptions.length,
+        itemCount: options.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final option = _filterOptions[i];
-          final bool selected = filterType == option;
+          final opt = options[i];
+          final bool selected = _statusFilter == opt['value'];
           return GestureDetector(
-            onTap: () => _onFilterChanged(option),
+            onTap: () => _onStatusFilterChanged(opt['value']!),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -583,11 +504,60 @@ class _TransactionPageState extends State<TransactionPage> {
               ),
               child: Center(
                 child: Text(
-                  option,
+                  opt['label']!,
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: selected ? Colors.white : theme.textTheme.bodyLarge?.color,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTypeFilterChips(ThemeData theme) {
+    const options = [
+      {'label': 'Semua Jenis', 'value': null},
+      {'label': 'Pemasukan', 'value': 'income'},
+      {'label': 'Pengeluaran', 'value': 'expense'},
+    ];
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: options.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final opt = options[i];
+          final bool selected = _typeFilter == opt['value'];
+          final chipColor = opt['value'] == 'income'
+              ? Colors.green
+              : opt['value'] == 'expense'
+              ? Colors.red
+              : _primaryBlue;
+          return GestureDetector(
+            onTap: () => _onTypeFilterChanged(opt['value'] as String?),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected ? chipColor.withOpacity(0.15) : theme.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: selected ? chipColor : theme.dividerColor.withOpacity(0.2),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  opt['label']!,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? chipColor : theme.textTheme.bodyLarge?.color,
                   ),
                 ),
               ),
@@ -606,10 +576,11 @@ class _TransactionPageState extends State<TransactionPage> {
           'Riwayat Transaksi (${filteredTransactions.length})',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: theme.textTheme.bodyLarge?.color),
         ),
-        Text(
-          'Ketuk: edit • Tekan lama: batalkan',
-          style: TextStyle(fontSize: 10.5, color: theme.hintColor),
-        ),
+        if (_statusFilter != 'disabled')
+          Text(
+            'Ketuk: edit • Tekan lama: void',
+            style: TextStyle(fontSize: 10.5, color: theme.hintColor),
+          ),
       ],
     );
   }
@@ -645,27 +616,29 @@ class _TransactionPageState extends State<TransactionPage> {
     );
   }
 
-  Widget _buildTransactionTile(Transaction item, Map<String, dynamic>? raw, ThemeData theme) {
-    final bool isIncome = item.type == 'Cash In' || item.type == 'income';
-    final category = _categoryOf(raw);
-    final categoryName = category?['name']?.toString();
-    final walletName = _walletName(raw);
-    final displayTitle = _displayTitle(item, raw);
+  Widget _buildTransactionTile(Transaction trx, ThemeData theme) {
+    final bool isIncome = trx.type == 'income';
+    final categoryName = trx.category?.name;
+    final walletName = trx.wallet?.name;
+    final creatorName = trx.createdBy?.name;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: trx.isVoid ? theme.cardColor.withOpacity(0.6) : theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.08)),
+        border: Border.all(
+          color: trx.isVoid ? Colors.orange.withOpacity(0.3) : theme.dividerColor.withOpacity(0.08),
+        ),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 6, offset: const Offset(0, 2)),
         ],
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: raw == null ? null : () => _startEditTransaction(raw),
-        onLongPress: raw == null ? null : () => _voidTransaction(raw),
+        // Aktif: tap=edit, long=void. Void: tap=restore
+        onTap: trx.isVoid ? () => _restoreTransaction(trx.id) : () => _startEditTransaction(trx),
+        onLongPress: trx.isVoid ? null : () => _voidTransaction(trx),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -675,10 +648,14 @@ class _TransactionPageState extends State<TransactionPage> {
                 children: [
                   CircleAvatar(
                     radius: 20,
-                    backgroundColor: categoryName != null
+                    backgroundColor: trx.isVoid
+                        ? Colors.grey.withOpacity(0.15)
+                        : categoryName != null
                         ? _categoryColor(categoryName).withOpacity(0.15)
                         : (isIncome ? Colors.green.shade50 : Colors.red.shade50),
-                    child: categoryName != null
+                    child: trx.isVoid
+                        ? const Icon(Icons.block, color: Colors.grey, size: 18)
+                        : categoryName != null
                         ? Text(
                       _categoryInitial(categoryName),
                       style: TextStyle(
@@ -700,17 +677,44 @@ class _TransactionPageState extends State<TransactionPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(displayTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: theme.textTheme.bodyLarge?.color)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            trx.displayTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                              color: trx.isVoid ? theme.hintColor : theme.textTheme.bodyLarge?.color,
+                              decoration: trx.isVoid ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                        ),
+                        if (trx.isVoid) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'VOID',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 3),
                     Wrap(
                       spacing: 6,
                       runSpacing: 2,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(_formatDate(item.date), style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                        Text(_formatDate(trx.dateTime), style: TextStyle(fontSize: 11, color: theme.hintColor)),
                         if (walletName != null) ...[
                           Text('•', style: TextStyle(fontSize: 11, color: theme.hintColor)),
                           Container(
@@ -722,6 +726,10 @@ class _TransactionPageState extends State<TransactionPage> {
                             child: Text(walletName,
                                 style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _primaryBlue)),
                           ),
+                        ],
+                        if (creatorName != null && creatorName.isNotEmpty) ...[
+                          Text('•', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                          Text(creatorName, style: TextStyle(fontSize: 10.5, color: theme.hintColor)),
                         ],
                       ],
                     ),
@@ -736,33 +744,46 @@ class _TransactionPageState extends State<TransactionPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(
-                      color: isIncome ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                      color: trx.isVoid
+                          ? Colors.grey.withOpacity(0.1)
+                          : isIncome ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${isIncome ? "+" : "-"} ${_formatRupiah(item.amount)}',
+                      '${isIncome ? "+" : "-"} ${_formatRupiah(trx.amount)}',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13,
-                        color: isIncome ? Colors.green.shade400 : Colors.red.shade400,
+                        color: trx.isVoid
+                            ? Colors.grey
+                            : isIncome ? Colors.green.shade400 : Colors.red.shade400,
                       ),
                     ),
                   ),
-                  if (raw != null)
+                  if (!trx.isVoid)
                     PopupMenuButton<String>(
                       padding: EdgeInsets.zero,
                       icon: Icon(Icons.more_vert, size: 18, color: theme.hintColor),
                       onSelected: (value) {
-                        if (value == 'edit') _startEditTransaction(raw);
-                        if (value == 'void') _voidTransaction(raw);
+                        if (value == 'edit') _startEditTransaction(trx);
+                        if (value == 'void') _voidTransaction(trx);
                       },
                       itemBuilder: (context) => const [
                         PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(value: 'void', child: Text('Batalkan', style: TextStyle(color: Colors.red))),
+                        PopupMenuItem(value: 'void', child: Text('Void', style: TextStyle(color: Colors.red))),
                       ],
                     )
                   else
-                    const SizedBox(width: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: IconButton(
+                        icon: const Icon(Icons.restore, size: 20, color: Colors.green),
+                        onPressed: () => _restoreTransaction(trx.id),
+                        tooltip: 'Pulihkan',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
                 ],
               ),
             ],

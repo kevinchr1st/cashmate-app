@@ -110,13 +110,19 @@ class _RegisterPageState extends State<RegisterPage> {
                     child: Column(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: const Color(0xFFE8F1FF),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.account_balance_wallet,
-                              size: 32, color: Color(0xFF0D6EFD)),
+                          child: Image.asset(
+                            'assets/cashmate-logo.png',
+                            height: 36,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.account_balance_wallet,
+                                    size: 32, color: Color(0xFF0D6EFD)),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
