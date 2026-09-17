@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'pages/splash_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/owner/owner_navigation_page.dart';
 import 'pages/staff/staff_navigation_page.dart';
+import 'utils/app_theme.dart';
 
 /// Notifier global untuk mode tema (terang/gelap).
 /// Dipakai oleh profile_page.dart lewat `_changeThemeMode()`.
@@ -45,17 +47,8 @@ class _CashMateAppState extends State<CashMateApp> {
           title: 'CashMate UMKM',
           debugShowCheckedModeBanner: false,
           themeMode: currentMode,
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            scaffoldBackgroundColor: const Color(0xFFF7F9FC),
-            useMaterial3: false,
-          ),
-          darkTheme: ThemeData.dark().copyWith(
-            primaryColor: const Color(0xFF0D6EFD),
-            scaffoldBackgroundColor: const Color(0xFF121212),
-            cardColor: const Color(0xFF1E1E1E),
-            useMaterial3: false,
-          ),
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
           initialRoute: '/',
           routes: {
             '/': (context) => const SplashPage(),

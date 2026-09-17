@@ -27,18 +27,40 @@ class _RekapPageState extends State<RekapPage> {
   List<Map<String, dynamic>> _monthlyData = [];
 
   // Ringkasan
-  double get _totalIncome => _monthlyData.fold(0.0, (s, m) => s + _d(m['income']));
-  double get _totalExpense => _monthlyData.fold(0.0, (s, m) => s + _d(m['expense']));
+  double get _totalIncome =>
+      _monthlyData.fold(0.0, (s, m) => s + _d(m['income']));
+  double get _totalExpense =>
+      _monthlyData.fold(0.0, (s, m) => s + _d(m['expense']));
   double get _netCashflow => _totalIncome - _totalExpense;
 
   static const _monthLabels = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Ags',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des'
   ];
 
   static const _monthFull = [
-    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember'
   ];
 
   @override
@@ -91,6 +113,27 @@ class _RekapPageState extends State<RekapPage> {
     return 0.0;
   }
 
+  /// Peta data per bulan (1..12). Jika field `month` tidak ada/tidak valid,
+  /// tetap urutkan sesuai posisi list (asumsi API mengembalikan Jan–Des)
+  /// agar chart & tabel tidak tampil kosong padahal datanya ada.
+  Map<int, Map<String, dynamic>> _monthMap() {
+    final result = <int, Map<String, dynamic>>{};
+    var hasValidMonth = false;
+    for (final m in _monthlyData) {
+      final monthNum = _d(m['month']).toInt();
+      if (monthNum >= 1 && monthNum <= 12) {
+        result[monthNum] = m;
+        hasValidMonth = true;
+      }
+    }
+    if (!hasValidMonth) {
+      for (var i = 0; i < _monthlyData.length && i < 12; i++) {
+        result[i + 1] = _monthlyData[i];
+      }
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -109,14 +152,23 @@ class _RekapPageState extends State<RekapPage> {
                 color: _blue,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.bar_chart_rounded, color: Colors.white, size: 20),
+              child: const Icon(Icons.bar_chart_rounded,
+                  color: Colors.white, size: 20),
             ),
             const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('CASHMATE UMKM', style: TextStyle(fontSize: 10, color: theme.hintColor, fontWeight: FontWeight.bold)),
-                Text('Rekap Bulanan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
+                Text('CASHMATE UMKM',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: theme.hintColor,
+                        fontWeight: FontWeight.bold)),
+                Text('Rekap Bulanan',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.textTheme.bodyLarge?.color)),
               ],
             ),
           ],
@@ -136,15 +188,16 @@ class _RekapPageState extends State<RekapPage> {
             const SizedBox(height: 20),
 
             if (isLoading)
-              const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
-            else if (_monthlyData.isEmpty)
-              _buildEmptyState(theme)
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CircularProgressIndicator()))
             else ...[
-              // ---- Chart ----
+              // ---- Chart (selalu tampil 12 bulan, data kosong = 0) ----
               _buildChartCard(theme),
               const SizedBox(height: 20),
 
-              // ---- Table ----
+              // ---- Tabel ----
               _buildMonthlyTable(theme),
             ],
           ],
@@ -178,7 +231,9 @@ class _RekapPageState extends State<RekapPage> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: selectedYear >= DateTime.now().year ? null : () => _changeYear(1),
+            onPressed: selectedYear >= DateTime.now().year
+                ? null
+                : () => _changeYear(1),
           ),
         ],
       ),
@@ -188,16 +243,23 @@ class _RekapPageState extends State<RekapPage> {
   Widget _buildSummaryCards(ThemeData theme) {
     return Row(
       children: [
-        Expanded(child: _summaryCard('Pemasukan', _totalIncome, _green, Icons.arrow_downward, theme)),
+        Expanded(
+            child: _summaryCard('Pemasukan', _totalIncome, _green,
+                Icons.arrow_downward, theme)),
         const SizedBox(width: 10),
-        Expanded(child: _summaryCard('Pengeluaran', _totalExpense, _red, Icons.arrow_upward, theme)),
+        Expanded(
+            child: _summaryCard(
+                'Pengeluaran', _totalExpense, _red, Icons.arrow_upward, theme)),
         const SizedBox(width: 10),
-        Expanded(child: _summaryCard('Net', _netCashflow, _netCashflow >= 0 ? _green : _red, Icons.trending_up, theme)),
+        Expanded(
+            child: _summaryCard('Net', _netCashflow,
+                _netCashflow >= 0 ? _green : _red, Icons.trending_up, theme)),
       ],
     );
   }
 
-  Widget _summaryCard(String label, double value, Color color, IconData icon, ThemeData theme) {
+  Widget _summaryCard(
+      String label, double value, Color color, IconData icon, ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -212,13 +274,16 @@ class _RekapPageState extends State<RekapPage> {
             children: [
               Icon(icon, size: 14, color: color),
               const SizedBox(width: 4),
-              Flexible(child: Text(label, style: TextStyle(fontSize: 11, color: theme.hintColor))),
+              Flexible(
+                  child: Text(label,
+                      style: TextStyle(fontSize: 11, color: theme.hintColor))),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             _formatCompact(value),
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.bold, color: color),
           ),
         ],
       ),
@@ -227,13 +292,7 @@ class _RekapPageState extends State<RekapPage> {
 
   Widget _buildChartCard(ThemeData theme) {
     // Map data per bulan (1..12) agar posisi bar akurat
-    final Map<int, Map<String, dynamic>> monthMap = {};
-    for (final m in _monthlyData) {
-      final monthNum = _d(m['month']).toInt();
-      if (monthNum >= 1 && monthNum <= 12) {
-        monthMap[monthNum] = m;
-      }
-    }
+    final monthMap = _monthMap();
 
     // Cari max value untuk Y axis
     double maxY = 0;
@@ -267,7 +326,10 @@ class _RekapPageState extends State<RekapPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Grafik Pemasukan & Pengeluaran',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: theme.textTheme.bodyLarge?.color)),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: theme.textTheme.bodyLarge?.color)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -276,7 +338,11 @@ class _RekapPageState extends State<RekapPage> {
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text('Tahun $selectedYear', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text('Tahun $selectedYear',
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -295,7 +361,11 @@ class _RekapPageState extends State<RekapPage> {
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
+                // Skala sumbu Y dinamis mengikuti nilai maksimum data,
+                // bukan statis — jadi bar 10jt tidak "tenggelam" ke bawah.
+                minY: 0,
                 maxY: maxY,
+                groupsSpace: 10,
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipColor: (_) => const Color(0xFF1E293B),
@@ -303,7 +373,10 @@ class _RekapPageState extends State<RekapPage> {
                       final label = rodIndex == 0 ? 'Pemasukan' : 'Pengeluaran';
                       return BarTooltipItem(
                         '$label\n${_formatRupiah(rod.toY)}',
-                        const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold),
                       );
                     },
                   ),
@@ -315,10 +388,15 @@ class _RekapPageState extends State<RekapPage> {
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= 12) return const SizedBox.shrink();
+                        if (idx < 0 || idx >= 12)
+                          return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: Text(_monthLabels[idx], style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: theme.hintColor)),
+                          child: Text(_monthLabels[idx],
+                              style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.hintColor)),
                         );
                       },
                       reservedSize: 26,
@@ -328,21 +406,28 @@ class _RekapPageState extends State<RekapPage> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 52,
+                      interval: maxY / 4,
                       getTitlesWidget: (value, meta) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Text(_formatCompact(value), textAlign: TextAlign.right, style: TextStyle(fontSize: 9, color: theme.hintColor)),
+                          child: Text(_formatCompact(value),
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                  fontSize: 9, color: theme.hintColor)),
                         );
                       },
                     ),
                   ),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                 ),
                 gridData: FlGridData(
                   show: true,
                   drawHorizontalLine: true,
                   drawVerticalLine: false,
+                  horizontalInterval: maxY / 4,
                   getDrawingHorizontalLine: (value) => FlLine(
                     color: theme.dividerColor.withOpacity(0.12),
                     strokeWidth: 1,
@@ -359,14 +444,16 @@ class _RekapPageState extends State<RekapPage> {
                       BarChartRodData(
                         toY: inc,
                         color: _blue,
-                        width: 7,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        width: 9,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4)),
                       ),
                       BarChartRodData(
                         toY: exp,
                         color: _amber,
-                        width: 7,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        width: 9,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4)),
                       ),
                     ],
                   );
@@ -383,7 +470,11 @@ class _RekapPageState extends State<RekapPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(3))),
         const SizedBox(width: 4),
         Text(label, style: const TextStyle(fontSize: 11)),
       ],
@@ -391,6 +482,21 @@ class _RekapPageState extends State<RekapPage> {
   }
 
   Widget _buildMonthlyTable(ThemeData theme) {
+    final monthMap = _monthMap();
+
+    // Warna latar header & zebra — mengikuti mode terang/gelap.
+    final Color headerBg = theme.colorScheme.surfaceContainerHighest;
+    final Color zebraBg = theme.dividerColor.withValues(alpha: 0.06);
+    final Color rowLine = theme.dividerColor.withValues(alpha: 0.15);
+    final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final Color faintColor = theme.hintColor;
+
+    const TextAlign right = TextAlign.right;
+
+    // Kolom responsif: Bulan lebih lebar, kolom nominal rata kanan.
+    const monthCol = FlexColumnWidth(5);
+    const moneyCol = FlexColumnWidth(3);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -402,81 +508,97 @@ class _RekapPageState extends State<RekapPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Rincian Per Bulan',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: theme.textTheme.bodyLarge?.color)),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
           const SizedBox(height: 12),
-          // Header
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                const Expanded(flex: 2, child: Text('Bulan', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                Expanded(flex: 2, child: Text('Pemasukan', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _green), textAlign: TextAlign.right)),
-                Expanded(flex: 2, child: Text('Pengeluaran', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _red), textAlign: TextAlign.right)),
-                const Expanded(flex: 2, child: Text('Net', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-              ],
+          Table(
+            // Lebar kolom proporsional (flex) agar tidak overflow di HP kecil.
+            columnWidths: const {
+              0: monthCol,
+              1: moneyCol,
+              2: moneyCol,
+              3: moneyCol,
+            },
+            // Border tipis antar baris + pemisah kolom yang halus.
+            border: TableBorder(
+              horizontalInside: BorderSide(color: rowLine, width: 0.7),
+              right: BorderSide(color: rowLine, width: 0.7),
             ),
-          ),
-          Divider(height: 1, color: theme.dividerColor.withOpacity(0.2)),
-          ...List.generate(12, (i) {
-            final inc = i < _monthlyData.length ? _d(_monthlyData[i]['income']) : 0.0;
-            final exp = i < _monthlyData.length ? _d(_monthlyData[i]['expense']) : 0.0;
-            final net = i < _monthlyData.length ? _d(_monthlyData[i]['net_cashflow']) : 0.0;
-            final hasData = inc > 0 || exp > 0;
-
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              // ---- Header ----
+              TableRow(
+                decoration: BoxDecoration(
+                  color: headerBg,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(8)),
+                ),
                 children: [
-                  Expanded(
-                    flex: 2,
-                    child: Text(
+                  _tableText('Bulan',
+                      left: true, bold: true, color: textColor, header: true),
+                  _tableText('Pemasukan',
+                      right: right, bold: true, color: _green, header: true),
+                  _tableText('Pengeluaran',
+                      right: right, bold: true, color: _red, header: true),
+                  _tableText('Net',
+                      right: right, bold: true, color: textColor, header: true),
+                ],
+              ),
+              // ---- Baris per bulan (zebra) ----
+              for (int i = 0; i < 12; i++)
+                TableRow(
+                  decoration: BoxDecoration(
+                    // Selang-seling putih / abu sangat muda agar mudah dibaca.
+                    color: i.isOdd ? zebraBg : null,
+                  ),
+                  children: [
+                    _tableText(
                       _monthFull[i],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: hasData ? theme.textTheme.bodyLarge?.color : theme.hintColor,
-                      ),
+                      left: true,
+                      color:
+                          hasDataOf(monthMap, i + 1) ? textColor : faintColor,
                     ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      _formatCompact(inc),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(fontSize: 12, color: hasData ? _green : theme.hintColor),
+                    _tableText(
+                      _formatCompact(amountOf(monthMap, i + 1, 'income')),
+                      right: right,
+                      color: hasDataOf(monthMap, i + 1) ? _green : faintColor,
                     ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      _formatCompact(exp),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(fontSize: 12, color: hasData ? _red : theme.hintColor),
+                    _tableText(
+                      _formatCompact(amountOf(monthMap, i + 1, 'expense')),
+                      right: right,
+                      color: hasDataOf(monthMap, i + 1) ? _red : faintColor,
                     ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      _formatCompact(net),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: hasData ? FontWeight.bold : FontWeight.normal,
-                        color: hasData ? (net >= 0 ? _green : _red) : theme.hintColor,
-                      ),
+                    _tableText(
+                      _formatCompact(amountOf(monthMap, i + 1, 'net_cashflow')),
+                      right: right,
+                      bold: hasDataOf(monthMap, i + 1),
+                      color: netColorOf(monthMap, i + 1, faintColor),
                     ),
+                  ],
+                ),
+              // ---- Total ----
+              TableRow(
+                decoration: BoxDecoration(
+                  color: headerBg,
+                  borderRadius:
+                      const BorderRadius.vertical(bottom: Radius.circular(8)),
+                ),
+                children: [
+                  _tableText('TOTAL',
+                      left: true, bold: true, color: textColor, isTotal: true),
+                  _tableText(_formatCompact(_totalIncome),
+                      right: right, bold: true, color: _green, isTotal: true),
+                  _tableText(_formatCompact(_totalExpense),
+                      right: right, bold: true, color: _red, isTotal: true),
+                  _tableText(
+                    _formatCompact(_netCashflow),
+                    right: right,
+                    bold: true,
+                    color: _netCashflow >= 0 ? _green : _red,
+                    isTotal: true,
                   ),
                 ],
               ),
-            );
-          }),
-          Divider(height: 16, color: theme.dividerColor.withOpacity(0.2)),
-          // Total row
-          Row(
-            children: [
-              const Expanded(flex: 2, child: Text('TOTAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-              Expanded(flex: 2, child: Text(_formatCompact(_totalIncome), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _green))),
-              Expanded(flex: 2, child: Text(_formatCompact(_totalExpense), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _red))),
-              Expanded(flex: 2, child: Text(_formatCompact(_netCashflow), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _netCashflow >= 0 ? _green : _red))),
             ],
           ),
         ],
@@ -484,22 +606,55 @@ class _RekapPageState extends State<RekapPage> {
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 60),
-        child: Column(
-          children: [
-            Icon(Icons.bar_chart_outlined, size: 48, color: theme.hintColor),
-            const SizedBox(height: 12),
-            Text('Belum ada data untuk tahun $selectedYear',
-                style: TextStyle(color: theme.hintColor, fontSize: 13)),
-            const SizedBox(height: 6),
-            Text('Coba pilih tahun lain atau catat transaksi terlebih dahulu.',
-                style: TextStyle(fontSize: 11, color: theme.hintColor)),
-          ],
+  /// Helper teks sel tabel: rata kiri untuk Bulan, rata kanan untuk nominal.
+  Widget _tableText(
+    String text, {
+    TextAlign? right,
+    bool left = false,
+    bool bold = false,
+    bool header = false,
+    bool isTotal = false,
+    required Color color,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: header ? 10 : 9,
+        horizontal: 4,
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        textAlign: right ?? (left ? TextAlign.left : TextAlign.right),
+        style: TextStyle(
+          fontSize: isTotal ? 12.5 : 12,
+          fontWeight: bold
+              ? FontWeight.w700
+              : (header ? FontWeight.w700 : FontWeight.w500),
+          color: color,
         ),
       ),
     );
+  }
+
+  double amountOf(Map<int, Map<String, dynamic>> map, int month, String key) {
+    final row = map[month];
+    return row == null ? 0.0 : _d(row[key]);
+  }
+
+  bool hasDataOf(Map<int, Map<String, dynamic>> map, int month) {
+    final row = map[month];
+    return row != null && (_d(row['income']) > 0 || _d(row['expense']) > 0);
+  }
+
+  Color netColorOf(
+    Map<int, Map<String, dynamic>> map,
+    int month,
+    Color emptyColor,
+  ) {
+    final row = map[month];
+    if (row == null) return emptyColor;
+    return _d(row['net_cashflow']) >= 0 ? _green : _red;
   }
 }
