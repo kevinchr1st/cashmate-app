@@ -160,6 +160,13 @@ class _RegisterPageState extends State<RegisterPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 11, color: theme.hintColor),
                         ),
+                        const SizedBox(height: 10),
+                        Image.asset(
+                          'assets/auth-illustration.png',
+                          height: 90,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
                       ],
                     ),
                   ),

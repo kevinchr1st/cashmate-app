@@ -184,6 +184,13 @@ class _LoginPageState extends State<LoginPage> {
                           'Aplikasi Pembukuan UMKM',
                           style: TextStyle(fontSize: 11, color: theme.hintColor),
                         ),
+                        const SizedBox(height: 14),
+                        Image.asset(
+                          'assets/auth-illustration.png',
+                          height: 110,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
                       ],
                     ),
                   ),

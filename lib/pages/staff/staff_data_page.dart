@@ -47,6 +47,13 @@ class _StaffDataPageState extends State<StaffDataPage> with SingleTickerProvider
     });
   }
 
+  String _formatRupiah(double amount) {
+    String str = amount.toStringAsFixed(0);
+    RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    String result = str.replaceAllMapped(reg, (Match m) => '${m[1]}.');
+    return 'Rp $result';
+  }
+
   void _openAddTransaction() {
     Navigator.push(
       context,
@@ -176,7 +183,13 @@ class _StaffDataPageState extends State<StaffDataPage> with SingleTickerProvider
                                 child: Text(w['currency'] ?? 'IDR', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _blue)),
                               ),
                               const SizedBox(width: 8),
-                              const Text('Aktif untuk transaksi', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                              if (w['balance'] != null)
+                                Text(
+                                  _formatRupiah((w['balance'] is num) ? (w['balance'] as num).toDouble() : double.tryParse(w['balance'].toString()) ?? 0),
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _blue),
+                                )
+                              else
+                                const Text('Aktif untuk transaksi', style: TextStyle(fontSize: 11, color: Colors.grey)),
                             ],
                           ),
                         ],

@@ -482,8 +482,10 @@ class _StaffHomePageState extends State<StaffHomePage> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              w['currency'] ?? 'IDR',
-                              style: TextStyle(fontSize: 10, color: theme.hintColor, fontWeight: FontWeight.w500),
+                              w['balance'] != null
+                                  ? _formatRupiah((w['balance'] is num) ? (w['balance'] as num).toDouble() : double.tryParse(w['balance'].toString()) ?? 0)
+                                  : (w['currency'] ?? 'IDR'),
+                              style: const TextStyle(fontSize: 11, color: _blue, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
