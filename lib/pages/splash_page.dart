@@ -214,61 +214,63 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
+                      Image.asset(
+                        'assets/cashmate-logo.png',
+                        width: 110,
+                        height: 110,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.account_balance_wallet,
+                          size: 80,
+                          color: Color(0xFF0D6EFD),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      RichText(
+                        text: const TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'Cash',
+                              style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF3B82F6),
+                                letterSpacing: 0.5,
+                              ),
                             ),
-                            BoxShadow(
-                              color: Colors.white.withOpacity(0.2),
-                              blurRadius: 20,
-                              spreadRadius: 5,
+                            TextSpan(
+                              text: 'Mate',
+                              style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFFFFB800),
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ],
                         ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/cashmate-logo.png',
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.account_balance_wallet,
-                              size: 64,
-                              color: Color(0xFF0D6EFD),
-                            ),
-                          ),
-                        ),
                       ),
-                      const SizedBox(height: 28),
-                      const Text(
-                        'CASHMATE UMKM',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 2.0,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFF0D6EFD).withValues(alpha: 0.3),
+                              const Color(0xFFFFB800).withValues(alpha: 0.3),
+                            ],
+                          ),
                           borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFFFB800).withValues(alpha: 0.4),
+                          ),
                         ),
                         child: const Text(
-                          'Solusi Pembukuan Keuangan Modern',
+                          'Solusi Pembukuan Keuangan UMKM',
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
                             letterSpacing: 0.5,
                           ),
                         ),

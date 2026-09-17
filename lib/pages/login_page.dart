@@ -157,12 +157,27 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          'CashMate',
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0D6EFD)),
+                        RichText(
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Cash',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0D6EFD),
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'Mate',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFFFB800),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(

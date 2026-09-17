@@ -307,12 +307,17 @@ class _DashboardPageState extends State<DashboardPage> {
         Container(
           height: 40,
           width: 40,
+          padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: _blue,
+            color: const Color(0xFFE8F1FF),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.account_balance_wallet,
-              color: Colors.white, size: 21),
+          child: Image.asset(
+            'assets/cashmate-logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) =>
+                const Icon(Icons.account_balance_wallet, color: _blue, size: 21),
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -427,11 +432,19 @@ class _DashboardPageState extends State<DashboardPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0B47B8), Color(0xFF2B7BF3)],
+          colors: [Color(0xFF002966), Color(0xFF0D6EFD), Color(0xFF1E6BFF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFB800).withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D6EFD).withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -855,41 +868,28 @@ class _DashboardPageState extends State<DashboardPage> {
   List<_ChartSeries> _buildChartSeries() {
     if (_monthlyReport.isEmpty) return [];
 
+    final Map<int, Map<String, dynamic>> monthMap = {};
+    for (final r in _monthlyReport) {
+      final m = _toDouble(r['month']).toInt();
+      if (m >= 1 && m <= 12) monthMap[m] = r;
+    }
+
     final currentMonth = DateTime.now().month;
-    final start = math.max(0, currentMonth - 6);
-    final slice = _monthlyReport.sublist(
-      math.min(start, _monthlyReport.length),
-      math.min(currentMonth, _monthlyReport.length),
-    );
-    if (slice.isEmpty) return [];
+    final startMonth = math.max(1, currentMonth - 5);
 
-    double pick(Map<String, dynamic> row, List<String> keys) {
-      for (final k in keys) {
-        if (row[k] != null) return _toDouble(row[k]);
-      }
-      return double.nan;
+    final income = <double>[];
+    final expense = <double>[];
+
+    for (int m = startMonth; m <= currentMonth; m++) {
+      final row = monthMap[m];
+      income.add(_toDouble(row?['income'] ?? row?['total_income'] ?? 0));
+      expense.add(_toDouble(row?['expense'] ?? row?['total_expense'] ?? 0));
     }
 
-    final income = slice
-        .map((r) => pick(r, ['income', 'total_income', 'current_month_income']))
-        .toList();
-    final expense = slice
-        .map((r) =>
-        pick(r, ['expense', 'total_expense', 'current_month_expense']))
-        .toList();
-
-    final hasDetail =
-        income.every((v) => !v.isNaN) && expense.every((v) => !v.isNaN);
-
-    if (hasDetail) {
-      return [
-        _ChartSeries(values: income, color: _blue, filled: true),
-        _ChartSeries(values: expense, color: _amber, filled: false),
-      ];
-    }
-
-    final net = slice.map((r) => _toDouble(r['net_cashflow'])).toList();
-    return [_ChartSeries(values: net, color: _blue, filled: true)];
+    return [
+      _ChartSeries(values: income, color: _blue, filled: true),
+      _ChartSeries(values: expense, color: _amber, filled: false),
+    ];
   }
 
   List<String> _chartLabels() {
@@ -898,8 +898,11 @@ class _DashboardPageState extends State<DashboardPage> {
       'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
     ];
     final currentMonth = DateTime.now().month;
-    final start = math.max(0, currentMonth - 6);
-    return names.sublist(start, currentMonth);
+    final startMonth = math.max(1, currentMonth - 5);
+    return List.generate(
+      currentMonth - startMonth + 1,
+      (i) => names[startMonth - 1 + i],
+    );
   }
 
   Widget _categoryRecapCard() {

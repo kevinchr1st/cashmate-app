@@ -226,51 +226,84 @@ class _RekapPageState extends State<RekapPage> {
   }
 
   Widget _buildChartCard(ThemeData theme) {
+    // Map data per bulan (1..12) agar posisi bar akurat
+    final Map<int, Map<String, dynamic>> monthMap = {};
+    for (final m in _monthlyData) {
+      final monthNum = _d(m['month']).toInt();
+      if (monthNum >= 1 && monthNum <= 12) {
+        monthMap[monthNum] = m;
+      }
+    }
+
     // Cari max value untuk Y axis
     double maxY = 0;
-    for (final m in _monthlyData) {
-      final inc = _d(m['income']);
-      final exp = _d(m['expense']);
+    for (int i = 1; i <= 12; i++) {
+      final row = monthMap[i];
+      final inc = _d(row?['income']);
+      final exp = _d(row?['expense']);
       if (inc > maxY) maxY = inc;
       if (exp > maxY) maxY = exp;
     }
-    maxY = maxY == 0 ? 100000 : maxY * 1.2;
+    maxY = maxY == 0 ? 100000 : maxY * 1.25;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Grafik Pemasukan & Pengeluaran',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: theme.textTheme.bodyLarge?.color)),
-          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Grafik Pemasukan & Pengeluaran',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: theme.textTheme.bodyLarge?.color)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [_blue, _amber],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('Tahun $selectedYear', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           // Legend
           Row(
             children: [
-              _legendDot(_green, 'Pemasukan'),
+              _legendDot(_blue, 'Pemasukan'),
               const SizedBox(width: 16),
-              _legendDot(_red, 'Pengeluaran'),
+              _legendDot(_amber, 'Pengeluaran'),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 220,
+            height: 230,
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
                 maxY: maxY,
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => const Color(0xFF1E293B),
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       final label = rodIndex == 0 ? 'Pemasukan' : 'Pengeluaran';
                       return BarTooltipItem(
                         '$label\n${_formatRupiah(rod.toY)}',
-                        const TextStyle(color: Colors.white, fontSize: 11),
+                        const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                       );
                     },
                   ),
@@ -285,18 +318,21 @@ class _RekapPageState extends State<RekapPage> {
                         if (idx < 0 || idx >= 12) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: Text(_monthLabels[idx], style: TextStyle(fontSize: 9, color: theme.hintColor)),
+                          child: Text(_monthLabels[idx], style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: theme.hintColor)),
                         );
                       },
-                      reservedSize: 24,
+                      reservedSize: 26,
                     ),
                   ),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 46,
+                      reservedSize: 52,
                       getTitlesWidget: (value, meta) {
-                        return Text(_formatCompact(value), style: TextStyle(fontSize: 9, color: theme.hintColor));
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(_formatCompact(value), textAlign: TextAlign.right, style: TextStyle(fontSize: 9, color: theme.hintColor)),
+                        );
                       },
                     ),
                   ),
@@ -308,19 +344,30 @@ class _RekapPageState extends State<RekapPage> {
                   drawHorizontalLine: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                    color: theme.dividerColor.withOpacity(0.15),
+                    color: theme.dividerColor.withOpacity(0.12),
                     strokeWidth: 1,
                   ),
                 ),
                 borderData: FlBorderData(show: false),
                 barGroups: List.generate(12, (i) {
-                  final inc = i < _monthlyData.length ? _d(_monthlyData[i]['income']) : 0.0;
-                  final exp = i < _monthlyData.length ? _d(_monthlyData[i]['expense']) : 0.0;
+                  final row = monthMap[i + 1];
+                  final inc = _d(row?['income']);
+                  final exp = _d(row?['expense']);
                   return BarChartGroupData(
                     x: i,
                     barRods: [
-                      BarChartRodData(toY: inc, color: _green, width: 6, borderRadius: BorderRadius.circular(3)),
-                      BarChartRodData(toY: exp, color: _red, width: 6, borderRadius: BorderRadius.circular(3)),
+                      BarChartRodData(
+                        toY: inc,
+                        color: _blue,
+                        width: 7,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                      BarChartRodData(
+                        toY: exp,
+                        color: _amber,
+                        width: 7,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
                     ],
                   );
                 }),

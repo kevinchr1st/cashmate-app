@@ -124,11 +124,33 @@ class _RegisterPageState extends State<RegisterPage> {
                                     size: 32, color: Color(0xFF0D6EFD)),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        RichText(
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Cash',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0D6EFD),
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'Mate',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFFFB800),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
                         Text(
                           'Daftar Akun Owner',
                           style: theme.textTheme.titleLarge?.copyWith(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
