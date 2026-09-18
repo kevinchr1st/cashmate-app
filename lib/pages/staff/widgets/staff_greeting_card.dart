@@ -90,7 +90,6 @@ class StaffGreetingCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: Colors.white70),
         ],
       ),
     );

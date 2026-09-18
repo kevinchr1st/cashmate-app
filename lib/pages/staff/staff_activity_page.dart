@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../utils/string_utils.dart';
 import '../../widgets/app_badge.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/app_empty_state.dart';
@@ -80,7 +81,7 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
   void _showDetailModal(Map<String, dynamic> trx) {
     final type = (trx['type'] ?? '').toString();
     final isIncome = type == 'income';
-    final desc = (trx['description'] ?? '').toString();
+    final desc = htmlUnescape((trx['description'] ?? '').toString());
     final amount = _parseAmount(trx['amount']);
 
     final walletName =
@@ -95,7 +96,7 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
       builder: (dialogCtx) {
         final theme = Theme.of(context);
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.xl,
               AppSpacing.lg,
@@ -358,7 +359,7 @@ class _StaffActivityPageState extends State<StaffActivityPage> {
   Widget _buildTile(Map<String, dynamic> trx) {
     final type = (trx['type'] ?? '').toString();
     final isIncome = type == 'income';
-    final desc = (trx['description'] ?? '').toString();
+    final desc = htmlUnescape((trx['description'] ?? '').toString());
     final amount = _parseAmount(trx['amount']);
 
     final walletName = trx['wallet'] is Map ? trx['wallet']['name']?.toString() : null;
