@@ -255,25 +255,13 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: rememberMe,
-                            onChanged: (v) => setState(() => rememberMe = v!),
-                          ),
-                          Text('Ingat saya',
-                              style: TextStyle(fontSize: 12, color: theme.textTheme.bodyMedium?.color)),
-                        ],
+                      Checkbox(
+                        value: rememberMe,
+                        onChanged: (v) => setState(() => rememberMe = v!),
                       ),
-                      TextButton(
-                        onPressed: () {},
-                        child: const Text(
-                          'Lupa password?',
-                          style: TextStyle(fontSize: 12, color: Color(0xFF0D6EFD)),
-                        ),
-                      )
+                      Text('Ingat saya',
+                          style: TextStyle(fontSize: 12, color: theme.textTheme.bodyMedium?.color)),
                     ],
                   ),
                   const SizedBox(height: 16),

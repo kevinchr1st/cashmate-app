@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../../utils/string_utils.dart';
 
 class KasirPage extends StatefulWidget {
   const KasirPage({super.key});
@@ -162,7 +163,7 @@ class _KasirPageState extends State<KasirPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(trx['description']?.toString() ?? 'Transaksi', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(htmlUnescape(trx['description']?.toString() ?? 'Transaksi'), style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             TextField(
               controller: reasonController,
@@ -655,7 +656,7 @@ class _KasirPageState extends State<KasirPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(trx['description']?.toString() ?? 'Transaksi', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(htmlUnescape(trx['description']?.toString() ?? 'Transaksi'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     Text(trx['created_at']?.toString() ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                   ],
                 ),

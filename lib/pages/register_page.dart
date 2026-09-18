@@ -17,7 +17,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
   bool agreeTerms = false;
   bool isLoading = false;
-  String selectedBusinessType = 'Retail & F&B • Warung Modern';
 
   @override
   void dispose() {
@@ -206,30 +205,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Tipe Usaha',
-                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: selectedBusinessType,
-                    style: TextStyle(color: theme.textTheme.bodyLarge?.color, fontSize: 14),
-                    dropdownColor: theme.cardColor,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: theme.cardColor,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    items: [
-                      'Retail & F&B • Warung Modern',
-                      'Jasa & Servis',
-                      'Fashion & Pakaian',
-                      'Kuliner & Resto'
-                    ].map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
-                    onChanged: (v) => setState(() => selectedBusinessType = v!),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
                     'Email',
                     style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.bold),
                   ),
@@ -300,10 +275,13 @@ class _RegisterPageState extends State<RegisterPage> {
                     height: 48,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D6EFD),
+                        backgroundColor: (isLoading || !agreeTerms)
+                            ? Colors.grey.shade400
+                            : const Color(0xFF0D6EFD),
+                        disabledBackgroundColor: Colors.grey.shade400,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: isLoading ? null : _handleRegister,
+                      onPressed: (isLoading || !agreeTerms) ? null : _handleRegister,
                       child: const Text(
                         'Daftar Sekarang',
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),

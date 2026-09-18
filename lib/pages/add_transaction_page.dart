@@ -8,9 +8,18 @@ import 'owner/category_page.dart';
 import 'owner/wallet_page.dart';
 
 class AddTransactionPage extends StatefulWidget {
+  /// Diisi saat mode edit (transaksi tertentu yang sedang diperbaiki).
   final Map<String, dynamic>? initialTransaction;
 
-  const AddTransactionPage({super.key, this.initialTransaction});
+  /// Pra-pilih tipe transaksi saat membuka form baru: 'income' | 'expense'.
+  /// Digunakan tombol aksi cepat (membuka form langsung dengan tipe terpilih).
+  final String? initialType;
+
+  const AddTransactionPage({
+    super.key,
+    this.initialTransaction,
+    this.initialType,
+  });
 
   bool get isEditing => initialTransaction != null;
 
@@ -80,6 +89,10 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
           }
         }
       }
+    } else if (widget.initialType != null) {
+      // Mode baru: hormati pra-pilih tipe dari tombol aksi cepat (Kasir).
+      selectedType =
+          widget.initialType == 'expense' ? 'expense' : 'income';
     }
     _loadUserRole();
     _loadMasterData();
@@ -372,6 +385,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   }
 
   bool get _isInsufficient {
+    // Staff tidak diberi info saldo → jangan pernah blokir dengan ini.
+    if (!isOwner) return false;
     final amount = _parseAmount(amountController.text);
     return selectedType == 'expense' && amount > _walletBalance;
   }
@@ -385,6 +400,19 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
         !isSaving;
   }
 
+  // Staff tidak berhak menentukan tanggal/backdate: payload hanya dikirim
+  // untuk Owner yang memilih tanggal lampau. Staff selalu memakai waktu
+  // server (DateTime.now() saat menyimpan) secara read-only.
+  String? get _dateParam {
+    if (isOwner && _isBackdated) {
+      final d = selectedDateTime;
+      return '${d.year.toString().padLeft(4, '0')}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+    }
+    return null;
+  }
+
   Future<void> _saveTransaction() async {
     final amount = _parseAmount(amountController.text);
     final walletId = int.tryParse(selectedWallet!['id'].toString());
@@ -393,12 +421,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
 
     setState(() => isSaving = true);
 
-    String? dateParam;
-    if (_isBackdated) {
-      final d = selectedDateTime;
-      dateParam =
-          '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    }
+    final String? dateParam = _dateParam;
 
     try {
       // Menyesuaikan parameter agar persis dengan format body Postman
@@ -771,9 +794,11 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                                 color: theme.textTheme.bodyLarge?.color)),
                         const SizedBox(height: 2),
                         Text(
-                          hasBalance
-                              ? '${_walletBalanceLabel(w)}: ${_formatRupiah((w['balance'] as num))}'
-                              : 'Saldo tidak ditampilkan',
+                          isOwner
+                              ? (hasBalance
+                                  ? '${_walletBalanceLabel(w)}: ${_formatRupiah((w['balance'] as num))}'
+                                  : 'Saldo tidak ditampilkan')
+                              : 'Saldo tersembunyi untuk Staff',
                           style:
                               TextStyle(fontSize: 11.5, color: theme.hintColor),
                         ),
@@ -866,12 +891,13 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   }
 
   Widget _buildDateTimeCard(ThemeData theme) {
+    final bool readOnly = !isOwner;
     return _card(theme, [
-      _label('Tanggal & Waktu', theme, required: true),
+      _label(readOnly ? 'Tanggal & Waktu (Otomatis)' : 'Tanggal & Waktu',
+          theme, required: true),
       const SizedBox(height: 10),
-      GestureDetector(
-        onTap: _pickDateTime,
-        child: Container(
+      if (readOnly)
+        Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: theme.scaffoldBackgroundColor,
@@ -880,19 +906,53 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.calendar_today, size: 16, color: _primaryBlue),
+              const Icon(Icons.schedule, size: 16, color: _primaryBlue),
               const SizedBox(width: 10),
               Expanded(
-                  child: Text(_formattedDateTime,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          color: theme.textTheme.bodyLarge?.color))),
-              Icon(Icons.access_time, size: 18, color: theme.hintColor),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_formattedDateTime,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: theme.textTheme.bodyLarge?.color)),
+                    Text(
+                      'Diisi otomatis saat transaksi disimpan',
+                      style: TextStyle(fontSize: 11, color: theme.hintColor),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.lock_outline, size: 16, color: theme.hintColor),
             ],
           ),
+        )
+      else
+        GestureDetector(
+          onTap: _pickDateTime,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 16, color: _primaryBlue),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Text(_formattedDateTime,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: theme.textTheme.bodyLarge?.color))),
+                Icon(Icons.access_time, size: 18, color: theme.hintColor),
+              ],
+            ),
+          ),
         ),
-      ),
     ]);
   }
 
@@ -948,7 +1008,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            'Foto struk baru hanya bisa dilampirkan saat transaksi baru.',
+            'Foto baru hanya bisa dilampirkan saat transaksi baru.',
             style: TextStyle(
                 fontSize: 10.5,
                 color: theme.hintColor,
@@ -1108,9 +1168,9 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
 
   Widget _buildImpactBar(ThemeData theme) {
     final amount = _parseAmount(amountController.text);
+    final bool hasAmount = amount > 0;
     final bool isIncome = selectedType == 'income';
-    // Nominal 0/kosong tampil bersih "Rp 0" tanpa tanda +/-.
-    final String prefix = amount > 0 ? (isIncome ? '+' : '-') : '';
+    // Nominal tunggal tanpa tanda +/- ganda; arah kas ditunjukkan chip label.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -1120,7 +1180,10 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
       child: Row(
         children: [
           Icon(isIncome ? Icons.trending_up : Icons.trending_down,
-              color: isIncome ? Colors.green : Colors.red),
+              size: 18,
+              color: hasAmount
+                  ? (isIncome ? Colors.green : Colors.red)
+                  : theme.hintColor),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1132,12 +1195,14 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '$prefix ${_formatRupiah(amount)}',
+                    _formatRupiah(amount),
                     maxLines: 1,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
-                      color: isIncome ? Colors.green : Colors.red,
+                      color: hasAmount
+                          ? (isIncome ? Colors.green : Colors.red)
+                          : theme.textTheme.bodyLarge?.color,
                     ),
                   ),
                 ),
@@ -1147,7 +1212,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+              color:
+                  isIncome ? Colors.green.shade100 : Colors.red.shade100,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -1155,7 +1221,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.bold,
-                color: isIncome ? Colors.green.shade800 : Colors.red.shade800,
+                color:
+                    isIncome ? Colors.green.shade800 : Colors.red.shade800,
               ),
             ),
           ),

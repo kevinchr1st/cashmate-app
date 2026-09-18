@@ -21,7 +21,7 @@ class StaffQuickActions extends StatelessWidget {
         Expanded(child: _actionButton(
           context,
           icon: Icons.south_west_rounded,
-          label: 'Catat Pemasukan',
+          label: 'Pemasukan',
           color: AppColors.success,
           onTap: onIncome,
         )),
@@ -29,7 +29,7 @@ class StaffQuickActions extends StatelessWidget {
         Expanded(child: _actionButton(
           context,
           icon: Icons.north_east_rounded,
-          label: 'Catat Pengeluaran',
+          label: 'Pengeluaran',
           color: AppColors.danger,
           onTap: onExpense,
         )),
@@ -47,7 +47,7 @@ class StaffQuickActions extends StatelessWidget {
     final theme = Theme.of(context);
     return AppCard(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
+        horizontal: AppSpacing.md,
         vertical: AppSpacing.md,
       ),
       child: InkWell(
@@ -63,12 +63,14 @@ class StaffQuickActions extends StatelessWidget {
               ),
               child: Icon(icon, color: color, size: 18),
             ),
-            const SizedBox(width: AppSpacing.sm + 2),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
                 label,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                textAlign: TextAlign.start,
                 style: AppTextStyles.subheading.copyWith(
                   color: theme.textTheme.bodyLarge?.color,
                 ),

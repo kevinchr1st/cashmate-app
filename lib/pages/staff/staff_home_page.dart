@@ -124,10 +124,14 @@ class _StaffHomePageState extends State<StaffHomePage> {
   static bool _isIncome(dynamic trx) =>
       ((trx as Map)['type'] ?? '').toString() == 'income';
 
-  Future<void> _openAddTransactionPage() async {
+  /// Buka form catat transaksi dengan tipe sudah terpilih (income/expense)
+  /// sesuai tombol aksi cepat yang ditekan Kasir.
+  Future<void> _openAddTransactionPage(String type) async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AddTransactionPage()),
+      MaterialPageRoute(
+        builder: (_) => AddTransactionPage(initialType: type),
+      ),
     );
     if (result == true && mounted) {
       _loadAll();
@@ -164,8 +168,8 @@ class _StaffHomePageState extends State<StaffHomePage> {
               ),
               const SizedBox(height: AppSpacing.lg),
               StaffQuickActions(
-                onIncome: _openAddTransactionPage,
-                onExpense: _openAddTransactionPage,
+                onIncome: () => _openAddTransactionPage('income'),
+                onExpense: () => _openAddTransactionPage('expense'),
               ),
               const SizedBox(height: AppSpacing.lg),
               if (isLoading)
